@@ -337,7 +337,25 @@
         </div>
     </div>
 
-    <!-- NEW: Mutual Sign-in Modal (Completely Redesigned V3) -->
+    <!-- Reset Menu Modal (NEW) -->
+    <div id="reset-menu-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity">
+        <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
+            <h3 class="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                <i data-lucide="rotate-ccw" class="w-5 h-5 text-orange-400"></i>
+                <span>重置選項</span>
+            </h3>
+            <div class="space-y-3">
+                <button onclick="resetRound()" class="w-full py-3 bg-red-900/20 border border-red-500/30 hover:bg-red-900/40 text-red-400 font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> 全部重置 (清空歷史)
+                </button>
+                <button onclick="closeResetMenu()" class="w-full py-3 text-dark-subtext hover:text-white font-bold rounded-lg transition-colors">
+                    取消
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mutual Sign-in Modal (Completely Redesigned V3) -->
     <div id="mutual-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity overflow-y-auto">
         <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-lg p-6 relative max-h-[90vh] flex flex-col">
             
@@ -354,7 +372,7 @@
                      <button onclick="toggleMutualSettings()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10" title="設定名單與目標">
                         <i data-lucide="settings" class="w-5 h-5"></i>
                     </button>
-                    <!-- Enhanced Reset Menu logic will be in JS -->
+                    <!-- Updated Reset Button -->
                     <button onclick="showResetMenu()" class="text-dark-subtext hover:text-orange-400 p-1 rounded hover:bg-white/10" title="重置選單">
                         <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
                     </button>
@@ -510,6 +528,7 @@
         const mutualTargetInput = document.getElementById('mutual-target-input');
         const mutualHelperButtonsEl = document.getElementById('mutual-helper-buttons');
         const mutualQuickHelperEl = document.getElementById('mutual-quick-helper');
+        const resetMenuModalEl = document.getElementById('reset-menu-modal');
 
         let mutualData = {
             target: 3,
@@ -532,30 +551,10 @@
                     });
                 } catch(e) { console.error('Mutual data parse error', e); }
             } else {
-                // Try to migrate V2 data or Init default
-                const v2Saved = localStorage.getItem('dashboard-mutual-data');
-                if (v2Saved) {
-                    try {
-                        const v2 = JSON.parse(v2Saved);
-                        mutualData.names = v2.names || ['A', 'B', 'C', 'D', 'E'];
-                        mutualData.names.forEach(n => {
-                            const v2User = v2.users && v2.users[n] ? v2.users[n] : { url: '' };
-                            // V2 migration: if done, assume helper is in history
-                            const history = (v2User.done && v2User.helper) ? [v2User.helper] : [];
-                            mutualData.users[n] = { 
-                                url: v2User.url || '', 
-                                history: history, 
-                                todayHelper: v2User.done ? v2User.helper : null 
-                            };
-                        });
-                        // Remove old V2 data to avoid confusion? No, keep safe.
-                    } catch(e) {}
-                } else {
-                    // Fresh Init
-                    mutualData.names.forEach(n => {
-                        mutualData.users[n] = { url: '', history: [], todayHelper: null };
-                    });
-                }
+                // Init default
+                mutualData.names.forEach(n => {
+                    mutualData.users[n] = { url: '', history: [], todayHelper: null };
+                });
             }
         }
 
@@ -632,11 +631,8 @@
             const idx = user.history.indexOf(helperName);
             
             if (idx > -1) {
-                // Already in history -> Remove it? 
-                // Wait, user logic implies adding history. 
-                // Let's implement toggle for correction purposes.
+                // Already in history -> Remove it
                 user.history.splice(idx, 1);
-                
                 // If removing the person who helped today, clear todayHelper
                 if (user.todayHelper === helperName) {
                     user.todayHelper = null;
@@ -647,7 +643,6 @@
                 // Also mark as today's helper
                 user.todayHelper = helperName;
             }
-            
             saveMutual();
             renderMutualList();
         }
@@ -669,28 +664,18 @@
             renderMutualList();
         }
 
+        // --- NEW RESET MENU LOGIC ---
         window.showResetMenu = () => {
-            const choice = prompt("請選擇重置模式 (輸入 1 或 2)：\n1. 僅重置今日狀態 (保留歷史累積)\n2. 重置本輪 (清除所有歷史紀錄)\n\n取消請按 ESC");
-            if (choice === '1') {
-                resetToday();
-            } else if (choice === '2') {
-                resetRound();
-            }
+            resetMenuModalEl.classList.remove('hidden');
+            lucide.createIcons();
         }
 
-        function resetToday() {
-            mutualData.names.forEach(n => {
-                if(mutualData.users[n]) {
-                    mutualData.users[n].todayHelper = null;
-                }
-            });
-            saveMutual();
-            renderMutualList();
-            // alert("今日狀態已重置，歷史紀錄保留。");
+        window.closeResetMenu = () => {
+            resetMenuModalEl.classList.add('hidden');
         }
 
-        function resetRound() {
-            if(!confirm("警告：這將清除所有歷史累積次數，確定要開始新的一輪嗎？")) return;
+        window.resetRound = () => {
+            // Logic: Clear all history and today status without confirmation
             mutualData.names.forEach(n => {
                 if(mutualData.users[n]) {
                     mutualData.users[n].todayHelper = null;
@@ -699,6 +684,7 @@
             });
             saveMutual();
             renderMutualList();
+            closeResetMenu();
         }
 
         window.pasteToMutual = async (inputId, name) => {
@@ -748,9 +734,6 @@
                     .filter(n => n !== name)
                     .map(helper => {
                         const inHistory = userData.history.includes(helper);
-                        // Button Style
-                        // If in history: Green active style
-                        // If NOT in history: Default
                         const btnClass = inHistory 
                             ? 'bg-emerald-600 text-white shadow shadow-emerald-900/50 border-emerald-500' 
                             : 'bg-dark-input text-dark-subtext border-dark-border hover:bg-white/5 hover:text-white';
