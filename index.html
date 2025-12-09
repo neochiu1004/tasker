@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V3 - Integrated</title>
+    <title>Command Center V3 - Instant Add</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -15,7 +15,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- 1. Firebase Configuration (From MOMO.HTML) ---
+        // --- 1. Firebase Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyA1o7BjEcjZBEyjNKnVi5bknbkkJJSy0DI",
             authDomain: "task-71198.firebaseapp.com",
@@ -1359,18 +1359,6 @@
                 schedule: schedule || null, 
             };
 
-            // Smart Duplicate Check
-            if(editingId === null) {
-                const allTasks = window.getTrackerData();
-                const duplicate = allTasks.find(t => t.name === name);
-                
-                if(duplicate) {
-                    if(confirm(`任務名稱 "${name}" 已存在！\n\n[確定]：覆蓋舊資料 (更新連結)\n[取消]：建立新的一筆 (允許重複)`)) {
-                        editingId = duplicate.id; // Switch to update mode
-                    }
-                }
-            }
-
             if(editingId !== null) {
                 // Update Cloud
                 window.updateTaskInCloud(editingId, {
@@ -1379,7 +1367,7 @@
                     executed: false 
                 });
             } else {
-                // Add Cloud
+                // Add Cloud - 直接新增，不再檢查名稱是否重複
                 window.saveTaskToCloud(taskData);
             }
             closeTrackerModal();
@@ -1400,6 +1388,8 @@
             const sharedTitle = params.get('share_title');
 
             if (sharedUrl) {
+                // IMPORTANT: In Cloud mode, we just auto-save to cloud!
+                // Or we can pop up the modal. Let's pop up modal to confirm title.
                 window.history.replaceState({}, document.title, window.location.pathname);
                 openTrackerModal();
                 document.getElementById('modal-url').value = sharedUrl;
