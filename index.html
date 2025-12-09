@@ -35,7 +35,7 @@
             console.error("Firebase Init Error", error);
         }
 
-        const APP_ID_ROOT = 'my-ticket-app'; // Align with MOMO.HTML root path
+        const APP_ID_ROOT = 'my-ticket-app'; 
         
         // State
         let currentUser = null;
@@ -45,6 +45,15 @@
         let unsubTasks = null;
         let unsubTimers = null;
         let unsubMutual = null;
+
+        // --- NEW: Check for Auto-Login via URL Params ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlSpaceId = urlParams.get('space_id');
+        if (urlSpaceId) {
+            console.log("Auto-login via URL:", urlSpaceId);
+            currentWorkspaceId = urlSpaceId;
+            localStorage.setItem('cmd_workspace_id', urlSpaceId);
+        }
 
         // --- 2. Auth & Login Logic ---
         const initAuth = async () => {
@@ -74,6 +83,10 @@
         window.handleLogout = () => {
             if(confirm('確定要登出此空間嗎？')) {
                 localStorage.removeItem('cmd_workspace_id');
+                // Remove param from URL to prevent auto-relogin
+                const url = new URL(window.location);
+                url.searchParams.delete('space_id');
+                window.history.pushState({}, '', url);
                 window.location.reload();
             }
         };
@@ -94,25 +107,17 @@
                     document.getElementById('main-app').classList.add('hidden');
                 }
                 
-                // Check for incoming shortcut share (Need to wait for auth/db)
+                // Check for incoming shortcut share
                 checkIncomingShare(); 
             }
         });
 
         // --- 3. Firestore Paths & Listeners ---
-        // To avoid mixing with Tickets, we suffix the collection names with the workspace ID
-        // Structure: artifacts/my-ticket-app/public/data/{WORKSPACE_ID}_cmd_tasks
-        
         function getCollections() {
             if (!currentWorkspaceId) return null;
-            // We use specific collections for Command Center to keep it clean from Tickets
             const taskColName = `${currentWorkspaceId}_cmd_tasks`;
             const timerColName = `${currentWorkspaceId}_cmd_timers`;
-            const mutualColName = `${currentWorkspaceId}_mutual`; // Shared with ticket app? Or separate? Let's keep separate for now unless requested.
-            
-            // Access: artifacts -> my-ticket-app -> public -> data -> {COLLECTION}
-            // Note: In MOMO.HTML, it uses `collection(..., workspaceId)` which means workspaceId is the collection name.
-            // We will follow that pattern but use distinct names.
+            const mutualColName = `${currentWorkspaceId}_mutual`;
             
             return {
                 tasks: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', taskColName),
@@ -125,14 +130,12 @@
             const cols = getCollections();
             if (!cols) return;
 
-            // Tasks
             if (unsubTasks) unsubTasks();
             unsubTasks = onSnapshot(query(cols.tasks, orderBy('createdAt', 'desc')), (snapshot) => {
                 trackerData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                 renderTracker();
             });
 
-            // Timers
             if (unsubTimers) unsubTimers();
             unsubTimers = onSnapshot(cols.timers, (snapshot) => {
                 timerData = snapshot.docs.map(d => ({ 
@@ -143,15 +146,11 @@
                 window.updateTimerLoop(); 
             });
 
-            // Mutual
             if (unsubMutual) unsubMutual();
             unsubMutual = onSnapshot(cols.mutualDoc, (docSnap) => {
                 if (docSnap.exists()) {
                     window.mutualData = docSnap.data();
                     window.renderMutualList();
-                } else {
-                    // Init default if needed, but don't overwrite if empty
-                    // window.saveMutual(); 
                 }
             });
             
@@ -205,15 +204,12 @@
         window.saveMutualToCloud = async (data) => {
              if (!currentUser || !currentWorkspaceId) return;
              const cols = getCollections();
-             // Use setDoc with merge to ensure creation
              await setDoc(cols.mutualDoc, data, { merge: true });
         };
         
-        // Expose Data
         window.getTrackerData = () => trackerData;
         window.getTimerData = () => timerData;
 
-        // Init
         initAuth();
 
     </script>
@@ -1362,6 +1358,18 @@
                 url: cleanUrl,
                 schedule: schedule || null, 
             };
+
+            // Smart Duplicate Check
+            if(editingId === null) {
+                const allTasks = window.getTrackerData();
+                const duplicate = allTasks.find(t => t.name === name);
+                
+                if(duplicate) {
+                    if(confirm(`任務名稱 "${name}" 已存在！\n\n[確定]：覆蓋舊資料 (更新連結)\n[取消]：建立新的一筆 (允許重複)`)) {
+                        editingId = duplicate.id; // Switch to update mode
+                    }
+                }
+            }
 
             if(editingId !== null) {
                 // Update Cloud
