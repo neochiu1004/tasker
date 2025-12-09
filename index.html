@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雲端票券待辦清單 (Pro+ v3.2 Auto-Notify)</title>
+    <title>雲端票券待辦清單 (Pro+ v3.3 Cloud-Sync)</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -132,7 +132,7 @@
             RefreshCcw, Search, FolderPlus, AlertCircle, MoreVertical, Copy as CopyIcon, Link as LinkIcon,
             Image as ImageIcon, Upload, Clipboard, ClipboardList, AlertTriangle, Download, FileJson, Database, FolderInput,
             LayoutDashboard, Moon, Sun, ChevronUp, ChevronDown, Filter, AlertOctagon, CheckSquare as CheckSquareIcon,
-            Bell, BellRing, Send, UserCheck
+            Bell, BellRing, Send, UserCheck, CloudCog
         } from 'lucide-react';
 
         // --- Firebase Configuration ---
@@ -160,6 +160,7 @@
 
         const appId = 'my-ticket-app';
         const TAGS_DOC_ID = 'app_tags';
+        const SETTINGS_DOC_ID = 'app_settings'; // New: Store settings in cloud
 
         // --- Helpers ---
         const compressImage = (file) => {
@@ -222,7 +223,6 @@
             const today = new Date(); today.setHours(0, 0, 0, 0);
             const diffTime = expiryDate - today;
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            // expiryDate < today means expired, also include in "soon" check but logic might differ
             return diffDays <= thresholdDays; 
         };
 
@@ -507,19 +507,40 @@
             );
         };
 
-        const SettingsModal = ({ isOpen, onClose, tgToken, setTgToken, tgChatId, setTgChatId, notifyDays, setNotifyDays }) => {
+        const SettingsModal = ({ isOpen, onClose, tgToken, setTgToken, tgChatId, setTgChatId, notifyDays, setNotifyDays, onSave }) => {
+            const [localToken, setLocalToken] = useState(tgToken);
+            const [localChatId, setLocalChatId] = useState(tgChatId);
+            const [localDays, setLocalDays] = useState(notifyDays);
+
+            // Sync props to local state when opened
+            useEffect(() => {
+                if (isOpen) {
+                    setLocalToken(tgToken);
+                    setLocalChatId(tgChatId);
+                    setLocalDays(notifyDays);
+                }
+            }, [isOpen, tgToken, tgChatId, notifyDays]);
+
+            const handleSave = () => {
+                onSave({ tgToken: localToken, tgChatId: localChatId, notifyDays: localDays });
+                onClose();
+            };
+
             if (!isOpen) return null;
             return (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in">
                     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-sm w-full p-6 border border-slate-100 dark:border-slate-700">
-                        <h2 className="text-lg font-bold mb-4 dark:text-white flex items-center gap-2">
-                            <BellRing size={20} className="text-blue-500"/> 通知設定
-                        </h2>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                            設定後，系統將在以下情況發送通知：<br/>
-                            1. 標記票券為「完成」時<br/>
-                            2. 進入空間時 (每次瀏覽器會話一次)<br/>
-                            3. 每日首次開啟時，若有快到期票券
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-lg font-bold dark:text-white flex items-center gap-2">
+                                <BellRing size={20} className="text-blue-500"/> 通知設定
+                            </h2>
+                            <div className="text-[10px] bg-blue-100 text-blue-600 px-2 py-1 rounded-full flex items-center gap-1 font-bold">
+                                <CloudCog size={12}/> Cloud Sync
+                            </div>
+                        </div>
+                        
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded border border-yellow-100 dark:border-yellow-800/50">
+                            <span className="font-bold text-yellow-600 dark:text-yellow-400">注意：</span> 設定將儲存於雲端空間，所有以此 ID 登入的裝置皆會共用此設定。
                         </p>
                         
                         <div className="space-y-3">
@@ -530,8 +551,8 @@
                                         type="number" 
                                         min="1"
                                         max="365"
-                                        value={notifyDays} 
-                                        onChange={e=>setNotifyDays(parseInt(e.target.value) || 7)} 
+                                        value={localDays} 
+                                        onChange={e=>setLocalDays(parseInt(e.target.value) || 7)} 
                                         className="w-20 p-2 text-sm text-center font-bold border rounded-lg bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                     <span className="text-sm text-slate-600 dark:text-slate-300">天內通知</span>
@@ -542,8 +563,8 @@
                                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">Bot Token</label>
                                 <input 
                                     type="text" 
-                                    value={tgToken} 
-                                    onChange={e=>setTgToken(e.target.value)} 
+                                    value={localToken} 
+                                    onChange={e=>setLocalToken(e.target.value)} 
                                     placeholder="123456:ABC-DEF..." 
                                     className="w-full p-2 text-sm border rounded-lg bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                                 />
@@ -554,8 +575,8 @@
                                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">Chat ID</label>
                                 <input 
                                     type="text" 
-                                    value={tgChatId} 
-                                    onChange={e=>setTgChatId(e.target.value)} 
+                                    value={localChatId} 
+                                    onChange={e=>setLocalChatId(e.target.value)} 
                                     placeholder="12345678" 
                                     className="w-full p-2 text-sm border rounded-lg bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                                 />
@@ -563,9 +584,10 @@
                             </div>
                         </div>
 
-                        <div className="mt-6 flex justify-end">
-                            <button onClick={onClose} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-700">
-                                儲存並關閉
+                        <div className="mt-6 flex justify-end gap-2">
+                            <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-sm font-bold">取消</button>
+                            <button onClick={handleSave} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-700">
+                                儲存至雲端
                             </button>
                         </div>
                     </div>
@@ -909,10 +931,10 @@
             const [showSettings, setShowSettings] = useState(false); 
             const [isMigrating, setIsMigrating] = useState(false);
 
-            // Notification States
-            const [tgToken, setTgToken] = useState(() => localStorage.getItem('pref_tgToken') || '');
-            const [tgChatId, setTgChatId] = useState(() => localStorage.getItem('pref_tgChatId') || '');
-            const [notifyDays, setNotifyDays] = useState(() => parseInt(localStorage.getItem('pref_notifyDays') || '7'));
+            // Notification States (SYNCED FROM CLOUD)
+            const [tgToken, setTgToken] = useState('');
+            const [tgChatId, setTgChatId] = useState('');
+            const [notifyDays, setNotifyDays] = useState(7);
 
             // Effects
             useEffect(() => {
@@ -921,55 +943,7 @@
                 localStorage.setItem('pref_theme', isDarkMode ? 'dark' : 'light');
             }, [isDarkMode]);
 
-            // Save Notification Prefs
-            useEffect(() => {
-                localStorage.setItem('pref_tgToken', tgToken);
-                localStorage.setItem('pref_tgChatId', tgChatId);
-                localStorage.setItem('pref_notifyDays', notifyDays);
-            }, [tgToken, tgChatId, notifyDays]);
-
-            // 1. Login Notification Logic (Session based)
-            useEffect(() => {
-                if (isJoined && tgToken && tgChatId) {
-                    const sessionKey = `joined_notified_${workspaceId}`;
-                    if (!sessionStorage.getItem(sessionKey)) {
-                        const msg = `🚀 *使用者登入通知* \n\n有人進入了空間: \`${workspaceId}\` \n⏰ 時間: ${new Date().toLocaleString('zh-TW')}`;
-                        sendTelegramMessage(tgToken, tgChatId, msg);
-                        sessionStorage.setItem(sessionKey, 'true');
-                    }
-                }
-            }, [isJoined, workspaceId, tgToken, tgChatId]);
-
-            // 2. Daily Expiry Notification Logic (Local Storage based date check)
-            useEffect(() => {
-                if (isJoined && tasks.length > 0 && tgToken && tgChatId) {
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    const lastCheck = localStorage.getItem('last_expiry_notify_date');
-                    
-                    if (lastCheck !== todayStr) {
-                        // Check for expiring tickets
-                        const expiringTasks = tasks.filter(t => !t.completed && !t.isDeleted && t.expiry && checkIsExpiringSoon(t.expiry, notifyDays));
-                        
-                        if (expiringTasks.length > 0) {
-                            let msg = `⚠️ *每日到期提醒 (${expiringTasks.length}筆)* \n`;
-                            msg += `設定天數: ${notifyDays} 天內 \n\n`;
-                            
-                            expiringTasks.slice(0, 10).forEach(t => {
-                                const days = getDaysRemaining(t.expiry);
-                                msg += `🔸 ${t.productName} (剩 ${days} 天) \n`;
-                            });
-                            
-                            if (expiringTasks.length > 10) msg += `...還有 ${expiringTasks.length - 10} 筆`;
-
-                            sendTelegramMessage(tgToken, tgChatId, msg);
-                        }
-                        // Mark checked for today
-                        localStorage.setItem('last_expiry_notify_date', todayStr);
-                    }
-                }
-            }, [isJoined, tasks, tgToken, tgChatId, notifyDays]);
-
-            // Auth & Data Fetching
+            // Auth & Data Fetching (Tickets + Tags + SETTINGS)
             useEffect(() => {
                 const initAuth = async () => { if (!auth) return; try { await signInAnonymously(auth); } catch (e) { setAuthError(e.message); } };
                 initAuth();
@@ -979,17 +953,52 @@
             useEffect(() => {
                 if (!user || !workspaceId || !db) { setLoading(false); return; }
                 setLoading(true);
+                
+                // 1. Listen for Tasks
                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', workspaceId), orderBy('createdAt', 'desc'));
                 const unsubscribe = onSnapshot(q, (snapshot) => {
                     const loadedTasks = [];
-                    snapshot.docs.forEach(doc => { if (doc.id !== TAGS_DOC_ID) loadedTasks.push({ id: doc.id, ...doc.data() }); });
+                    // Exclude config docs from task list
+                    snapshot.docs.forEach(doc => { 
+                        if (doc.id !== TAGS_DOC_ID && doc.id !== SETTINGS_DOC_ID) loadedTasks.push({ id: doc.id, ...doc.data() }); 
+                    });
                     setTasks(loadedTasks);
                     setLoading(false);
                 });
+
+                // 2. Listen for Tags
                 const tagDocRef = doc(db, 'artifacts', appId, 'public', 'data', workspaceId, TAGS_DOC_ID);
                 const unsubscribeTags = onSnapshot(tagDocRef, (docSnap) => { if (docSnap.exists()) setTags(docSnap.data().list || []); else setTags([]); });
-                return () => { unsubscribe(); unsubscribeTags(); };
+                
+                // 3. Listen for Settings (CLOUD SYNC)
+                const settingsDocRef = doc(db, 'artifacts', appId, 'public', 'data', workspaceId, SETTINGS_DOC_ID);
+                const unsubscribeSettings = onSnapshot(settingsDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        setTgToken(data.tgToken || '');
+                        setTgChatId(data.tgChatId || '');
+                        setNotifyDays(data.notifyDays || 7);
+                    }
+                });
+
+                return () => { unsubscribe(); unsubscribeTags(); unsubscribeSettings(); };
             }, [user, workspaceId]);
+
+            // Save Settings to Cloud
+            const handleSaveSettings = async (newSettings) => {
+                if (!user) return;
+                try {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', workspaceId, SETTINGS_DOC_ID), {
+                        tgToken: newSettings.tgToken,
+                        tgChatId: newSettings.tgChatId,
+                        notifyDays: newSettings.notifyDays
+                    }, { merge: true });
+                    alert("設定已同步至雲端！所有裝置將自動更新。");
+                } catch (e) {
+                    console.error("Save settings error", e);
+                    alert("儲存失敗");
+                }
+            };
 
             // Filter Logic
             const duplicateSerials = useMemo(() => {
@@ -1103,6 +1112,45 @@
                 else newSet.add(id); 
                 setSelectedTasks(newSet); 
             };
+
+            // 1. Login Notification Logic (Session based - still valid to use session storage for "this login")
+            useEffect(() => {
+                if (isJoined && tgToken && tgChatId) {
+                    const sessionKey = `joined_notified_${workspaceId}`;
+                    if (!sessionStorage.getItem(sessionKey)) {
+                        const msg = `🚀 *使用者登入通知* \n\n有人進入了空間: \`${workspaceId}\` \n⏰ 時間: ${new Date().toLocaleString('zh-TW')}`;
+                        sendTelegramMessage(tgToken, tgChatId, msg);
+                        sessionStorage.setItem(sessionKey, 'true');
+                    }
+                }
+            }, [isJoined, workspaceId, tgToken, tgChatId]); // Dependent on tgToken from cloud
+
+            // 2. Daily Expiry Notification Logic (Local Storage based date check)
+            useEffect(() => {
+                if (isJoined && tasks.length > 0 && tgToken && tgChatId) {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const lastCheck = localStorage.getItem('last_expiry_notify_date');
+                    
+                    if (lastCheck !== todayStr) {
+                        const expiringTasks = tasks.filter(t => !t.completed && !t.isDeleted && t.expiry && checkIsExpiringSoon(t.expiry, notifyDays));
+                        
+                        if (expiringTasks.length > 0) {
+                            let msg = `⚠️ *每日到期提醒 (${expiringTasks.length}筆)* \n`;
+                            msg += `設定天數: ${notifyDays} 天內 \n\n`;
+                            
+                            expiringTasks.slice(0, 10).forEach(t => {
+                                const days = getDaysRemaining(t.expiry);
+                                msg += `🔸 ${t.productName} (剩 ${days} 天) \n`;
+                            });
+                            
+                            if (expiringTasks.length > 10) msg += `...還有 ${expiringTasks.length - 10} 筆`;
+
+                            sendTelegramMessage(tgToken, tgChatId, msg);
+                        }
+                        localStorage.setItem('last_expiry_notify_date', todayStr);
+                    }
+                }
+            }, [isJoined, tasks, tgToken, tgChatId, notifyDays]); // Dependent on tgToken/notifyDays from cloud
 
             // Render
             if (!isJoined) return <LoginScreen onJoin={(id)=>{setWorkspaceId(id); localStorage.setItem('ticket_workspace_id', id); setIsJoined(true);}} authError={authError} />;
@@ -1241,7 +1289,7 @@
                     <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={tags} onAddTag={async(t)=>{if(!tags.includes(t)) await setDoc(doc(db,'artifacts',appId,'public','data',workspaceId,TAGS_DOC_ID),{list:[...tags,t]},{merge:true})}} onDeleteTag={async(t)=>{await setDoc(doc(db,'artifacts',appId,'public','data',workspaceId,TAGS_DOC_ID),{list:tags.filter(x=>x!==t)},{merge:true});}} onRenameTag={async(o,n)=>{/*Simplified for brevity*/}} />
                     {showMigration && <MigrationModal isOpen={showMigration} onClose={() => setShowMigration(false)} currentSpaceId={workspaceId} onMigrate={async(tid)=>{/*Simplified*/}}/>}
                     {showDataTools && <DataToolsModal isOpen={showDataTools} onClose={() => setShowDataTools(false)} tasks={tasks} onRestore={handleBatchRestore}/>}
-                    {showSettings && <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} tgToken={tgToken} setTgToken={setTgToken} tgChatId={tgChatId} setTgChatId={setTgChatId} notifyDays={notifyDays} setNotifyDays={setNotifyDays} />}
+                    {showSettings && <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} tgToken={tgToken} setTgToken={setTgToken} tgChatId={tgChatId} setTgChatId={setTgChatId} notifyDays={notifyDays} setNotifyDays={setNotifyDays} onSave={handleSaveSettings} />}
                 </div>
             );
         };
