@@ -1,143 +1,22 @@
 <!DOCTYPE html>
-<html lang="zh-TW" class="light">
+<html lang="zh-TW" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雲端票券待辦清單 (Pro+ v3.3 Cloud-Sync)</title>
-    
-    <!-- 1. 引入 Tailwind CSS -->
+    <title>Command Center V3 - Instant Add</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     
-    <!-- 2. 引入 Babel -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Firebase SDK (Modular) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    <!-- 3. 引入本地繪製條碼與QR Code的函式庫 -->
-    <script src="https://cdn.jsdelivr.net/npm/bwip-js@3.0.4/dist/bwip-js-min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
-
-    <!-- 4. 設定 Import Map -->
-    <script type="importmap">
-    {
-      "imports": {
-        "react": "https://esm.sh/react@18.2.0",
-        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-        "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
-        "firebase/auth": "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js",
-        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js",
-        "lucide-react": "https://esm.sh/lucide-react@0.294.0"
-      }
-    }
-    </script>
-
-    <script>
-        tailwind.config = {
-            darkMode: 'class', // 啟用手動切換深色模式
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#2563EB',
-                        darkBg: '#0f172a', // slate-900
-                        darkCard: '#1e293b', // slate-800
-                    },
-                    animation: {
-                        'pulse-red': 'pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                        'bounce-slight': 'bounce-slight 1s infinite',
-                    },
-                    keyframes: {
-                        'pulse-red': {
-                            '0%, 100%': { borderColor: 'rgba(220, 38, 38, 0.6)', boxShadow: '0 0 0 0 rgba(220, 38, 38, 0.2)' },
-                            '50%': { borderColor: 'rgba(220, 38, 38, 1)', boxShadow: '0 0 15px 4px rgba(220, 38, 38, 0.4)' },
-                        },
-                        'bounce-slight': {
-                            '0%, 100%': { transform: 'translateY(0)' },
-                            '50%': { transform: 'translateY(-3px)' },
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-
-    <style>
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; -webkit-tap-highlight-color: transparent; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-in { animation: fadeIn 0.3s ease-out forwards; }
-        canvas { max-width: 100%; height: auto; }
-
-        /* --- Ticket Shape CSS --- */
-        .ticket-card {
-            position: relative;
-            /* 預設變數，會在 JS 中根據深色模式切換 */
-            --card-bg: #ffffff; 
-            background: radial-gradient(circle at 0 2.5rem, transparent 0.75rem, var(--card-bg) 0.76rem) top left,
-                        radial-gradient(circle at 100% 2.5rem, transparent 0.75rem, var(--card-bg) 0.76rem) top right;
-            background-size: 51% 100%;
-            background-repeat: no-repeat;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.08));
-        }
-
-        .dark .ticket-card {
-            --card-bg: #1e293b; /* slate-800 */
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-        }
-        
-        .ticket-divider {
-            border-top: 2px dashed #cbd5e1; /* slate-300 */
-            margin: 0.5rem -1rem; /* Extend to edges */
-            position: relative;
-            opacity: 0.6;
-        }
-        .dark .ticket-divider {
-            border-color: #475569; /* slate-600 */
-        }
-        
-        /* 浮水印 */
-        .watermark-used {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(-15deg);
-            font-size: 3rem;
-            font-weight: 900;
-            color: rgba(0,0,0,0.05);
-            pointer-events: none;
-            border: 4px solid rgba(0,0,0,0.05);
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            text-transform: uppercase;
-            z-index: 0;
-        }
-        .dark .watermark-used {
-            color: rgba(255,255,255,0.05);
-            border-color: rgba(255,255,255,0.05);
-        }
-    </style>
-</head>
-<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 transition-colors duration-300">
-    
-    <div id="root"></div>
-
-    <script type="text/babel" data-type="module">
-        import React, { useState, useEffect, useMemo, useRef } from 'react';
-        import { createRoot } from 'react-dom/client';
-        import { initializeApp } from 'firebase/app';
-        import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-        import { getFirestore, collection, addDoc, deleteDoc, updateDoc, setDoc, doc, onSnapshot, query, orderBy, serverTimestamp, getDocs, writeBatch } from 'firebase/firestore';
-        import { 
-            Trash2, Calendar, Check, Plus, LogIn, ExternalLink, Tag, RotateCcw, 
-            CheckCircle2, ListTodo, Clock, StickyNote, Save, X, ScanBarcode, 
-            Pencil, ClipboardPaste, ArrowRightLeft, Copy, CheckSquare, Trash, 
-            RefreshCcw, Search, FolderPlus, AlertCircle, MoreVertical, Copy as CopyIcon, Link as LinkIcon,
-            Image as ImageIcon, Upload, Clipboard, ClipboardList, AlertTriangle, Download, FileJson, Database, FolderInput,
-            LayoutDashboard, Moon, Sun, ChevronUp, ChevronDown, Filter, AlertOctagon, CheckSquare as CheckSquareIcon,
-            Bell, BellRing, Send, UserCheck, CloudCog
-        } from 'lucide-react';
-
-        // --- Firebase Configuration ---
-        const externalConfig = window.MY_FIREBASE_CONFIG || {};
-        const firebaseConfig = externalConfig.apiKey ? externalConfig : {
+        // --- 1. Firebase Configuration ---
+        const firebaseConfig = {
             apiKey: "AIzaSyA1o7BjEcjZBEyjNKnVi5bknbkkJJSy0DI",
             authDomain: "task-71198.firebaseapp.com",
             projectId: "task-71198",
@@ -149,1153 +28,1379 @@
 
         let app, auth, db;
         try {
-            if (firebaseConfig.apiKey) {
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-            }
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
         } catch (error) {
             console.error("Firebase Init Error", error);
         }
 
-        const appId = 'my-ticket-app';
-        const TAGS_DOC_ID = 'app_tags';
-        const SETTINGS_DOC_ID = 'app_settings'; // New: Store settings in cloud
+        const APP_ID_ROOT = 'my-ticket-app'; 
+        
+        // State
+        let currentUser = null;
+        let currentWorkspaceId = localStorage.getItem('cmd_workspace_id') || '';
+        let trackerData = [];
+        let timerData = [];
+        let unsubTasks = null;
+        let unsubTimers = null;
+        let unsubMutual = null;
 
-        // --- Helpers ---
-        const compressImage = (file) => {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.src = e.target.result;
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        let width = img.width;
-                        let height = img.height;
-                        const MAX_WIDTH = 800; 
-                        const MAX_HEIGHT = 800;
-                        if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
-                        else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-                        canvas.width = width; canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-                        resolve(canvas.toDataURL('image/jpeg', 0.6));
-                    };
-                    img.onerror = (err) => reject(err);
-                };
-                reader.onerror = (err) => reject(err);
+        // --- NEW: Check for Auto-Login via URL Params ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlSpaceId = urlParams.get('space_id');
+        if (urlSpaceId) {
+            console.log("Auto-login via URL:", urlSpaceId);
+            currentWorkspaceId = urlSpaceId;
+            localStorage.setItem('cmd_workspace_id', urlSpaceId);
+        }
+
+        // --- 2. Auth & Login Logic ---
+        const initAuth = async () => {
+            try {
+                await signInAnonymously(auth);
+            } catch (error) {
+                console.error("Auth Error", error);
+                alert("無法連接至資料庫，請檢查網路或是 Firebase 設定限制。");
+            }
+        };
+
+        // UI Helpers for Login
+        window.handleLogin = (e) => {
+            e.preventDefault();
+            const inputId = document.getElementById('workspace-input').value.trim();
+            if (!inputId) return alert("請輸入空間代碼");
+            
+            currentWorkspaceId = inputId;
+            localStorage.setItem('cmd_workspace_id', inputId);
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            
+            // Trigger data load
+            initFirestoreListeners();
+        };
+
+        window.handleLogout = () => {
+            if(confirm('確定要登出此空間嗎？')) {
+                localStorage.removeItem('cmd_workspace_id');
+                // Remove param from URL to prevent auto-relogin
+                const url = new URL(window.location);
+                url.searchParams.delete('space_id');
+                window.history.pushState({}, '', url);
+                window.location.reload();
+            }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                console.log("Connected as", user.uid);
+                // If we have a workspace ID, load data immediately
+                if (currentWorkspaceId) {
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('main-app').classList.remove('hidden');
+                    initFirestoreListeners();
+                    // Update ID display
+                    document.getElementById('workspace-id-display').textContent = currentWorkspaceId;
+                } else {
+                    document.getElementById('login-screen').classList.remove('hidden');
+                    document.getElementById('main-app').classList.add('hidden');
+                }
+                
+                // Check for incoming shortcut share
+                checkIncomingShare(); 
+            }
+        });
+
+        // --- 3. Firestore Paths & Listeners ---
+        function getCollections() {
+            if (!currentWorkspaceId) return null;
+            const taskColName = `${currentWorkspaceId}_cmd_tasks`;
+            const timerColName = `${currentWorkspaceId}_cmd_timers`;
+            const mutualColName = `${currentWorkspaceId}_mutual`;
+            
+            return {
+                tasks: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', taskColName),
+                timers: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', timerColName),
+                mutualDoc: doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', mutualColName, 'config')
+            };
+        }
+
+        function initFirestoreListeners() {
+            const cols = getCollections();
+            if (!cols) return;
+
+            if (unsubTasks) unsubTasks();
+            unsubTasks = onSnapshot(query(cols.tasks, orderBy('createdAt', 'desc')), (snapshot) => {
+                trackerData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderTracker();
+            });
+
+            if (unsubTimers) unsubTimers();
+            unsubTimers = onSnapshot(cols.timers, (snapshot) => {
+                timerData = snapshot.docs.map(d => ({ 
+                    id: d.id, 
+                    ...d.data(),
+                    endTime: d.data().endTime ? d.data().endTime.toDate() : new Date() 
+                }));
+                window.updateTimerLoop(); 
+            });
+
+            if (unsubMutual) unsubMutual();
+            unsubMutual = onSnapshot(cols.mutualDoc, (docSnap) => {
+                if (docSnap.exists()) {
+                    window.mutualData = docSnap.data();
+                    window.renderMutualList();
+                }
+            });
+            
+            document.getElementById('workspace-id-display').textContent = currentWorkspaceId;
+        }
+
+        // --- 4. CRUD Operations ---
+        
+        window.saveTaskToCloud = async (task) => {
+            if (!currentUser || !currentWorkspaceId) return;
+            const cols = getCollections();
+            await addDoc(cols.tasks, {
+                ...task,
+                createdAt: Date.now(),
+                executed: false,
+                clicks: 0
             });
         };
 
-        const parseTicketInfo = (text) => {
-            const result = { isTicket: false, serial: '', productName: '', expiry: '', originalText: text };
-            const serialMatch = text.match(/(?:票券序號|序號|CODE|Code)[:：]\s*([A-Za-z0-9]+)/i);
-            if (serialMatch) { result.isTicket = true; result.serial = serialMatch[1]; }
-            const dateRegex = /\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2}/g;
-            const dateMatches = text.match(dateRegex);
-            if (dateMatches && dateMatches.length > 0) result.expiry = dateMatches[dateMatches.length - 1];
-            const nameMatch = text.match(/【.*?】.*/);
-            if (nameMatch) { result.productName = nameMatch[0]; }
-            else if (result.isTicket) {
-                const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-                const likelyName = lines.find(l => l.length > 2 && l.length < 20 && !l.includes('序號') && !l.includes('期限') && !l.match(/\d{4}/) && (l.includes('元') || l.includes('券') || l.includes('飲') || l.includes('餐') || l.includes('堡') || l.includes('咖啡')));
-                result.productName = likelyName || (lines[0] || "未命名票券");
-            }
-            if (result.isTicket && !result.productName) result.productName = "未命名票券";
-            return result;
+        window.updateTaskInCloud = async (id, data) => {
+            if (!currentUser || !currentWorkspaceId) return;
+            const taskColName = `${currentWorkspaceId}_cmd_tasks`;
+            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', taskColName, id);
+            await updateDoc(docRef, data);
         };
 
-        const formatTimestamp = (timestamp, includeTime = false) => {
-            if (!timestamp) return '';
-            const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : new Date(timestamp);
-            const dateStr = `${date.getFullYear()}/${(date.getMonth()+1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
-            if (includeTime) return `${dateStr} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-            return dateStr;
+        window.deleteTaskFromCloud = async (id) => {
+            if (!currentUser || !currentWorkspaceId) return;
+            const taskColName = `${currentWorkspaceId}_cmd_tasks`;
+            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', taskColName, id);
+            await deleteDoc(docRef);
         };
 
-        const checkIsExpiringSoon = (expiryStr, thresholdDays) => {
-            if (!expiryStr) return false;
-            const normalizedDate = expiryStr.replace(/[\.\-]/g, '/');
-            const expiryDate = new Date(normalizedDate);
-            if (isNaN(expiryDate.getTime())) return false;
-            const today = new Date(); today.setHours(0, 0, 0, 0);
-            const diffTime = expiryDate - today;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            return diffDays <= thresholdDays; 
+        window.saveTimerToCloud = async (timer) => {
+            if (!currentUser || !currentWorkspaceId) return;
+            const cols = getCollections();
+            await addDoc(cols.timers, {
+                ...timer,
+                endTime: timer.endTime,
+                createdAt: Date.now()
+            });
         };
 
-        const getDaysRemaining = (expiryStr) => {
-            if (!expiryStr) return 999;
-            const normalizedDate = expiryStr.replace(/[\.\-]/g, '/');
-            const expiryDate = new Date(normalizedDate);
-            if (isNaN(expiryDate.getTime())) return 999;
-            const today = new Date(); today.setHours(0, 0, 0, 0);
-            const diffTime = expiryDate - today;
-            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        window.deleteTimerFromCloud = async (id) => {
+            if (!currentUser || !currentWorkspaceId) return;
+            const timerColName = `${currentWorkspaceId}_cmd_timers`;
+            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', timerColName, id);
+            await deleteDoc(docRef);
         };
 
-        const getTagColorClass = (tag, isDark) => {
-            if (!tag || tag === 'default') return isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-600';
-            const colors = [
-                isDark ? 'bg-orange-900/40 text-orange-200 border-orange-800' : 'bg-orange-50 text-orange-700 border-orange-100',
-                isDark ? 'bg-blue-900/40 text-blue-200 border-blue-800' : 'bg-blue-50 text-blue-700 border-blue-100',
-                isDark ? 'bg-emerald-900/40 text-emerald-200 border-emerald-800' : 'bg-emerald-50 text-emerald-700 border-emerald-100',
-                isDark ? 'bg-purple-900/40 text-purple-200 border-purple-800' : 'bg-purple-50 text-purple-700 border-purple-100',
-                isDark ? 'bg-pink-900/40 text-pink-200 border-pink-800' : 'bg-pink-50 text-pink-700 border-pink-100',
-                isDark ? 'bg-cyan-900/40 text-cyan-200 border-cyan-800' : 'bg-cyan-50 text-cyan-700 border-cyan-100',
-            ];
-            let hash = 0;
-            for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
-            return colors[Math.abs(hash) % colors.length];
+        window.saveMutualToCloud = async (data) => {
+             if (!currentUser || !currentWorkspaceId) return;
+             const cols = getCollections();
+             await setDoc(cols.mutualDoc, data, { merge: true });
         };
+        
+        window.getTrackerData = () => trackerData;
+        window.getTimerData = () => timerData;
 
-        const copyToClipboard = async (text) => {
-            if (!text) return false;
-            try { await navigator.clipboard.writeText(text); return true; } 
-            catch (err) {
-                try {
-                    const textArea = document.createElement("textarea"); textArea.value = text;
-                    textArea.style.position = "fixed"; document.body.appendChild(textArea); textArea.focus(); textArea.select();
-                    const successful = document.execCommand('copy'); document.body.removeChild(textArea); return successful;
-                } catch (fallbackErr) { return false; }
-            }
-        };
+        initAuth();
 
-        // 5. Telegram Notification Helper (General)
-        const sendTelegramMessage = async (token, chatId, text) => {
-            if (!token || !chatId || !text) return false;
-            const url = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(text)}&parse_mode=Markdown`;
-            try { await fetch(url, { mode: 'no-cors' }); return true; } catch (error) { console.error("TG Send Error:", error); return false; }
-        };
+    </script>
 
-        // --- Sub-Components ---
-        const QRCodeCanvas = ({ text, size = 150 }) => {
-            const canvasRef = useRef(null);
-            useEffect(() => { if (canvasRef.current && window.QRious) new window.QRious({ element: canvasRef.current, value: text, size: size, level: 'H' }); }, [text, size]);
-            return <div className="flex flex-col items-center p-2 bg-white rounded-lg border shadow-sm"><span className="text-[10px] text-gray-400 mb-1 uppercase tracking-wider">QR Code</span><canvas ref={canvasRef} /></div>;
-        };
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; 
+            color: #e2e8f0;
+            user-select: none;
+            touch-action: manipulation; 
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        
+        /* Time Input Styling */
+        input[type="time"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
 
-        const BarcodeCanvas = ({ text }) => {
-            const canvasRef = useRef(null);
-            useEffect(() => { if (canvasRef.current && window.bwipjs) try { window.bwipjs.toCanvas(canvasRef.current, { bcid: 'code128', text: text, scale: 3, height: 10, includetext: true, textxalign: 'center' }); } catch (e) {} }, [text]);
-            return <div className="flex flex-col items-center w-full p-2 bg-white rounded-lg border shadow-sm"><span className="text-[10px] text-gray-400 mb-1 uppercase tracking-wider">Barcode</span><canvas ref={canvasRef} className="max-w-full h-auto" /></div>;
-        };
+        /* Checkbox Styling */
+        .custom-checkbox {
+            appearance: none;
+            background-color: #334155;
+            margin: 0;
+            font: inherit;
+            color: currentColor;
+            width: 1.15em;
+            height: 1.15em;
+            border: 1px solid #475569;
+            border-radius: 0.25em;
+            display: grid;
+            place-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
 
-        // --- Main Components ---
-        const LoginScreen = ({ onJoin, authError }) => {
-            const [code, setCode] = useState('');
-            return (
-                <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900 px-4 transition-colors">
-                    <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-3xl shadow-2xl p-8 border border-slate-100 dark:border-slate-700">
-                        <div className="text-center mb-8">
-                            <div className="bg-blue-600 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 transform rotate-3 shadow-lg shadow-blue-600/30"><Calendar className="text-white w-10 h-10" /></div>
-                            <h1 className="text-3xl font-extrabold text-slate-800 dark:text-white mb-2">票券管家 <span className="text-blue-500">Pro+</span></h1>
-                            <p className="text-slate-500 dark:text-slate-400">雲端同步 · 隱私保護 · 到期提醒</p>
-                        </div>
-                        {authError && <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800 rounded-xl text-sm text-red-600 dark:text-red-300 flex items-center gap-2"><AlertCircle size={16}/> {authError}</div>}
-                        <form onSubmit={(e) => {e.preventDefault(); if(code.trim()) onJoin(code.trim());}} className="space-y-5">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">空間代碼 (Workspace ID)</label>
-                                <div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><LogIn className="h-5 w-5 text-gray-400" /></div><input type="text" required placeholder="例如: 2025-tickets" className="w-full pl-10 pr-4 py-3.5 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none font-medium text-slate-800 dark:text-white" value={code} onChange={(e) => setCode(e.target.value)} /></div>
-                            </div>
-                            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2">進入清單 <ExternalLink size={18} /></button>
-                        </form>
-                    </div>
-                </div>
-            );
-        };
+        .custom-checkbox::before {
+            content: "";
+            width: 0.65em;
+            height: 0.65em;
+            transform: scale(0);
+            transition: 120ms transform ease-in-out;
+            box-shadow: inset 1em 1em white;
+            transform-origin: center;
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        }
 
-        const TaskItem = ({ task, tags, onToggle, onDelete, onRestore, onPermanentDelete, onUpdateTicket, isSelectionMode, isSelected, onSelect, expiryThreshold, isDuplicate, isDarkMode, onManageTags }) => {
-            const [showCodes, setShowCodes] = useState(false);
-            const [justCopied, setJustCopied] = useState(false);
-            const [isEditing, setIsEditing] = useState(false);
-            
-            // Edit States
-            const [editName, setEditName] = useState(task.productName || task.text || '');
-            const [editSerial, setEditSerial] = useState(task.serial || '');
-            const [editExpiry, setEditExpiry] = useState(task.expiry || '');
-            const [editImage, setEditImage] = useState(task.image || '');
-            const [editUrl, setEditUrl] = useState(task.url || '');
-            const [editNote, setEditNote] = useState(task.note || '');
-            const [editTag, setEditTag] = useState(task.tag || 'default');
+        .custom-checkbox:checked {
+            background-color: #2563eb;
+            border-color: #2563eb;
+        }
 
-            const isCompleted = task.completed;
-            const isDeleted = task.isDeleted;
-            const isExpiring = !isCompleted && !isDeleted && task.expiry && checkIsExpiringSoon(task.expiry, expiryThreshold);
-            
-            const tagColor = getTagColorClass(task.tag, isDarkMode);
-            let cardClasses = `ticket-card w-full mb-3 transition-all duration-300 relative overflow-hidden group `;
-            
-            if (isDeleted) cardClasses += 'opacity-70 grayscale ';
-            if (isSelected) cardClasses += 'ring-2 ring-blue-500 transform scale-[1.01] ';
-            
-            if (isDuplicate && !isDeleted) {
-                cardClasses += 'border-2 border-red-500 shadow-xl shadow-red-200 dark:shadow-red-900/40 animate-pulse-red z-10 ';
-            } else if (isExpiring && !isDeleted) {
-                cardClasses += 'border border-red-300 shadow-md shadow-red-100 ';
-            }
+        .custom-checkbox:checked::before {
+            transform: scale(1);
+        }
 
-            const handleCopy = async (e) => {
-                e.stopPropagation();
-                if(task.serial && await copyToClipboard(task.serial)) {
-                    setJustCopied(true); setTimeout(() => setJustCopied(false), 2000);
+        /* Hide Scrollbar for Horizontal Scroll areas */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        
+        .view-section { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .input-focus-ring:focus-within {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            bg: '#0f172a', card: '#1e293b', input: '#334155',
+                            border: '#334155', text: '#f8fafc', subtext: '#94a3b8',
+                        }
+                    }
                 }
-            };
-
-            const handleSaveEdit = () => {
-                onUpdateTicket(task.id, editName, editSerial, editExpiry, editImage, editUrl, editNote, editTag);
-                setIsEditing(false);
-            };
-
-            const handleImageUpload = async (e) => {
-                const file = e.target.files[0];
-                if(file) try { setEditImage(await compressImage(file)); } catch(err) { alert("Error"); }
-            };
-
-            if (isEditing) {
-                return (
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border-2 border-blue-500 p-4 mb-3 space-y-3 relative z-20 animate-in" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-sm font-bold text-blue-500 uppercase">編輯票券</h3>
-                        <div><label className="text-xs text-slate-400">品名</label><input className="w-full bg-slate-50 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-600 p-1 text-lg font-bold outline-none dark:text-white" value={editName} onChange={e=>setEditName(e.target.value)}/></div>
-                        <div className="grid grid-cols-2 gap-2">
-                             <div>
-                                 <label className="text-xs text-slate-400">分類</label>
-                                 <div className="flex gap-1">
-                                     <select className="flex-1 bg-slate-50 dark:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-600 dark:text-white" value={editTag} onChange={e=>setEditTag(e.target.value)}><option value="default">未分類</option>{tags.map(t=><option key={t} value={t}>{t}</option>)}</select>
-                                     <button onClick={onManageTags} className="bg-blue-50 hover:bg-blue-100 text-blue-600 p-2 rounded border border-blue-200" title="管理分類"><FolderPlus size={16}/></button>
-                                 </div>
-                             </div>
-                             <div><label className="text-xs text-slate-400">期限</label><input className="w-full bg-slate-50 dark:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-600 dark:text-white" value={editExpiry} onChange={e=>setEditExpiry(e.target.value)}/></div>
-                        </div>
-                        <div><label className="text-xs text-slate-400">序號</label><input className="w-full font-mono bg-slate-50 dark:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-600 dark:text-white" value={editSerial} onChange={e=>setEditSerial(e.target.value)}/></div>
-                        <div><label className="text-xs text-slate-400">相關網址</label><input className="w-full bg-slate-50 dark:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-600 dark:text-blue-300 text-blue-600" value={editUrl} onChange={e=>setEditUrl(e.target.value)} placeholder="https://..."/></div>
-                        <div><label className="text-xs text-slate-400">備註</label><textarea className="w-full bg-slate-50 dark:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-600 h-16 resize-none dark:text-white" value={editNote} onChange={e=>setEditNote(e.target.value)}/></div>
-                        <div className="flex gap-2">
-                            {editImage && <div className="relative"><img src={editImage} className="h-10 w-10 rounded object-cover"/><button onClick={()=>setEditImage('')} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X size={10}/></button></div>}
-                            <label className="flex-1 flex items-center justify-center border border-dashed border-slate-300 dark:border-slate-600 rounded p-2 text-slate-400 cursor-pointer"><Upload size={14} className="mr-1"/>更換圖片<input type="file" hidden accept="image/*" onChange={handleImageUpload}/></label>
-                        </div>
-                        <div className="flex justify-end gap-2 pt-2">
-                            <button onClick={()=>setIsEditing(false)} className="px-3 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">取消</button>
-                            <button onClick={handleSaveEdit} className="px-4 py-1 bg-blue-600 text-white rounded shadow-md hover:bg-blue-700">儲存</button>
-                        </div>
-                    </div>
-                );
             }
+        }
+    </script>
+</head>
+<body class="min-h-screen flex flex-col items-center">
 
-            return (
-                <div className={cardClasses} onClick={() => { if(!isSelectionMode && !isDeleted) setShowCodes(!showCodes); }}>
-                    <div className="absolute top-0 right-0 z-10 flex flex-col items-end">
-                        {isDuplicate && !isDeleted && (
-                            <div className="bg-red-600 text-yellow-300 text-xs px-3 py-1 rounded-bl-lg font-black shadow-md mb-[1px] flex items-center gap-1 animate-bounce-slight border-l border-b border-white/20">
-                                <AlertOctagon size={12} strokeWidth={3}/> 重複序號
-                            </div>
-                        )}
-                        {isExpiring && !isDuplicate && <div className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-bl-lg font-bold shadow-sm">即將到期</div>}
-                    </div>
-
-                    <div className="pt-4 pb-2 px-3 relative">
-                        <div className="flex gap-3">
-                            <div className="flex flex-col items-center gap-2 flex-shrink-0">
-                                <div onClick={e=>e.stopPropagation()}>
-                                    {isSelectionMode ? (
-                                        <input type="checkbox" checked={isSelected} onChange={() => onSelect(task.id)} className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                                    ) : (
-                                        <button onClick={() => !isDeleted && onToggle(task)} disabled={isDeleted} className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isDeleted ? 'border-slate-300 text-slate-300' : isCompleted ? 'border-green-500 bg-green-500 text-white' : 'border-slate-300 text-transparent hover:border-blue-500 hover:text-blue-500'}`}>
-                                            <Check size={14} strokeWidth={3} />
-                                        </button>
-                                    )}
-                                </div>
-                                {task.image && (
-                                    <div className="w-28 h-28 rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden bg-white shadow-sm">
-                                        <img src={task.image} className={`w-full h-full object-cover ${isDeleted && 'grayscale'}`} alt="Ticket" />
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="flex-1 min-w-0 flex flex-col justify-start">
-                                <div className="flex justify-between items-start gap-1">
-                                    <h3 className={`font-bold text-lg leading-snug break-all ${isCompleted || isDeleted ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-800 dark:text-slate-100'}`}>
-                                        {task.productName}
-                                    </h3>
-                                </div>
-                                
-                                <div className="flex flex-wrap items-center gap-2 mt-2">
-                                    {task.tag && task.tag !== 'default' && <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${tagColor}`}>{task.tag}</span>}
-                                    {task.serial && (
-                                        <div onClick={handleCopy} className={`flex items-center gap-1 text-sm font-mono px-2 py-0.5 rounded border transition-colors cursor-pointer active:scale-95 ${justCopied ? 'bg-green-100 text-green-700 border-green-200' : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-blue-400'}`}>
-                                            {task.serial} {justCopied ? <Check size={12}/> : <CopyIcon size={12} className="opacity-50"/>}
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                {task.note && <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded line-clamp-3 whitespace-pre-wrap"><StickyNote size={10} className="inline mr-1"/>{task.note}</p>}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="ticket-divider"></div>
-
-                    <div className="pb-3 px-3 flex justify-between items-end relative">
-                        <div className="flex items-center gap-4">
-                            <div className="flex flex-col items-start">
-                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-0.5 ml-0.5">有效期限</span>
-                                {task.expiry ? (
-                                    <span className={`text-sm font-black flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
-                                        isCompleted || isDeleted 
-                                            ? 'text-slate-400 bg-slate-100 border-slate-200 dark:bg-slate-800 dark:border-slate-700' 
-                                            : isExpiring 
-                                                ? 'text-red-600 bg-red-50 border-red-100 dark:bg-red-900/30 dark:border-red-800' 
-                                                : 'text-green-700 bg-green-50 border-green-100 dark:bg-green-900/30 dark:border-green-800'
-                                    }`}>
-                                        <Calendar size={14} strokeWidth={2.5}/> {task.expiry}
-                                    </span>
-                                ) : (
-                                    <span className="text-sm font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 px-1"><Calendar size={14}/> 無期限</span>
-                                )}
-                            </div>
-
-                            <div className="flex flex-col items-start">
-                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-0.5 ml-0.5">新增日期</span>
-                                <span className="text-xs font-medium text-slate-400 dark:text-slate-500 px-0.5">
-                                    {task.createdAt ? formatTimestamp(task.createdAt) : ''}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-1 mb-0.5" onClick={e=>e.stopPropagation()}>
-                            {isDeleted ? (
-                                <>
-                                    <button onClick={()=>onRestore(task)} className="p-2 rounded-full hover:bg-green-50 text-green-600"><RefreshCcw size={16}/></button>
-                                    <button onClick={()=>onPermanentDelete(task.id)} className="p-2 rounded-full hover:bg-red-50 text-red-500"><Trash2 size={16}/></button>
-                                </>
-                            ) : (
-                                <>
-                                    {task.url && (
-                                        <a href={task.url} target="_blank" className="p-2 rounded-full hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-500 hover:text-blue-600" title="開啟連結">
-                                            <LinkIcon size={16}/>
-                                        </a>
-                                    )}
-                                    {!isCompleted && !isSelectionMode && <button onClick={()=>{setIsEditing(true);}} className="p-2 rounded-full hover:bg-blue-50 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500"><Pencil size={16}/></button>}
-                                    {!isSelectionMode && <button onClick={()=>onDelete(task.id)} className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-slate-700 text-slate-300 hover:text-red-500"><Trash size={16}/></button>}
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    {(isCompleted || isDeleted) && <div className="watermark-used">{isDeleted ? 'DELETED' : 'USED'}</div>}
-
-                    {showCodes && (
-                        <div className="border-t border-slate-100 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800/50 animate-in cursor-default text-center relative z-20" onClick={e=>e.stopPropagation()}>
-                            <div className="absolute top-2 right-2"><button onClick={()=>setShowCodes(false)} className="p-1 bg-slate-200 dark:bg-slate-700 rounded-full text-slate-500"><X size={16}/></button></div>
-                            <h4 className="font-bold text-slate-700 dark:text-slate-200 mb-4">{task.productName}</h4>
-                            
-                            {task.isTicket && (
-                                <div className="space-y-4 flex flex-col items-center">
-                                    <div className="bg-white p-2 rounded-lg"><BarcodeCanvas text={task.serial} /></div>
-                                    <div className="bg-white p-2 rounded-lg"><QRCodeCanvas text={task.serial} /></div>
-                                    <div className="text-2xl font-mono font-bold tracking-widest text-slate-800 dark:text-white select-all">{task.serial}</div>
-                                </div>
-                            )}
-                            
-                            {task.note && <div className="mt-4 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg text-sm text-left text-slate-600 dark:text-slate-300 border border-amber-100 dark:border-amber-800/30 whitespace-pre-wrap">{task.note}</div>}
-                            {task.url && <a href={task.url} target="_blank" className="block mt-4 text-blue-500 underline text-sm break-all">{task.url}</a>}
-                        </div>
-                    )}
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="fixed inset-0 z-50 bg-[#0f172a] flex items-center justify-center p-6 hidden">
+        <div class="w-full max-w-sm bg-dark-card border border-dark-border rounded-2xl p-8 shadow-2xl">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-900/50">
+                    <i data-lucide="command" class="w-8 h-8 text-white"></i>
                 </div>
-            );
-        };
-
-        const SettingsModal = ({ isOpen, onClose, tgToken, setTgToken, tgChatId, setTgChatId, notifyDays, setNotifyDays, onSave }) => {
-            const [localToken, setLocalToken] = useState(tgToken);
-            const [localChatId, setLocalChatId] = useState(tgChatId);
-            const [localDays, setLocalDays] = useState(notifyDays);
-
-            // Sync props to local state when opened
-            useEffect(() => {
-                if (isOpen) {
-                    setLocalToken(tgToken);
-                    setLocalChatId(tgChatId);
-                    setLocalDays(notifyDays);
-                }
-            }, [isOpen, tgToken, tgChatId, notifyDays]);
-
-            const handleSave = () => {
-                onSave({ tgToken: localToken, tgChatId: localChatId, notifyDays: localDays });
-                onClose();
-            };
-
-            if (!isOpen) return null;
-            return (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-sm w-full p-6 border border-slate-100 dark:border-slate-700">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-bold dark:text-white flex items-center gap-2">
-                                <BellRing size={20} className="text-blue-500"/> 通知設定
-                            </h2>
-                            <div className="text-[10px] bg-blue-100 text-blue-600 px-2 py-1 rounded-full flex items-center gap-1 font-bold">
-                                <CloudCog size={12}/> Cloud Sync
-                            </div>
-                        </div>
-                        
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded border border-yellow-100 dark:border-yellow-800/50">
-                            <span className="font-bold text-yellow-600 dark:text-yellow-400">注意：</span> 設定將儲存於雲端空間，所有以此 ID 登入的裝置皆會共用此設定。
-                        </p>
-                        
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">快到期通知天數 (N天)</label>
-                                <div className="flex items-center gap-2">
-                                    <input 
-                                        type="number" 
-                                        min="1"
-                                        max="365"
-                                        value={localDays} 
-                                        onChange={e=>setLocalDays(parseInt(e.target.value) || 7)} 
-                                        className="w-20 p-2 text-sm text-center font-bold border rounded-lg bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                    <span className="text-sm text-slate-600 dark:text-slate-300">天內通知</span>
-                                </div>
-                            </div>
-
-                            <div className="border-t dark:border-slate-700 my-2 pt-2">
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">Bot Token</label>
-                                <input 
-                                    type="text" 
-                                    value={localToken} 
-                                    onChange={e=>setLocalToken(e.target.value)} 
-                                    placeholder="123456:ABC-DEF..." 
-                                    className="w-full p-2 text-sm border rounded-lg bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <div className="text-[10px] text-slate-400 mt-1">請找 @BotFather 申請</div>
-                            </div>
-                            
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">Chat ID</label>
-                                <input 
-                                    type="text" 
-                                    value={localChatId} 
-                                    onChange={e=>setLocalChatId(e.target.value)} 
-                                    placeholder="12345678" 
-                                    className="w-full p-2 text-sm border rounded-lg bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <div className="text-[10px] text-slate-400 mt-1">請找 @userinfobot 查詢</div>
-                            </div>
-                        </div>
-
-                        <div className="mt-6 flex justify-end gap-2">
-                            <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-sm font-bold">取消</button>
-                            <button onClick={handleSave} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-700">
-                                儲存至雲端
-                            </button>
-                        </div>
-                    </div>
+                <h1 class="text-2xl font-bold text-white mb-2">Command Center</h1>
+                <p class="text-dark-subtext text-sm">請輸入您的空間代碼以同步資料</p>
+            </div>
+            <form onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-dark-subtext uppercase mb-2">Space ID</label>
+                    <input type="text" id="workspace-input" placeholder="例如: my-space-01" 
+                        class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none transition-colors text-center font-mono font-bold">
                 </div>
-            );
-        };
-
-        const Dashboard = ({ tasks, expiryThreshold }) => {
-            const [isOpen, setIsOpen] = useState(true);
-            const activeTasks = tasks.filter(t => !t.completed && !t.isDeleted);
-            const expiringCount = activeTasks.filter(t => t.expiry && checkIsExpiringSoon(t.expiry, expiryThreshold)).length;
-            const completedCount = tasks.filter(t => t.completed && !t.isDeleted).length;
-
-            if(!activeTasks.length && !completedCount) return null;
-
-            return (
-                <div className="mb-4 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden">
-                    <div className="absolute right-0 top-0 opacity-10 transform translate-x-4 -translate-y-4"><LayoutDashboard size={100} /></div>
-                    <div className="flex justify-between items-start relative z-10">
-                        <div>
-                            <h2 className="text-sm font-medium opacity-90 flex items-center gap-1">票券概況 {isOpen ? <ChevronUp size={14} onClick={()=>setIsOpen(false)} className="cursor-pointer"/> : <ChevronDown size={14} onClick={()=>setIsOpen(true)} className="cursor-pointer"/>}</h2>
-                            <div className="text-3xl font-bold mt-1">{activeTasks.length} <span className="text-xs font-normal opacity-70">張待使用</span></div>
-                        </div>
-                        {expiringCount > 0 && (
-                            <div className="bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-lg flex items-center gap-2 animate-pulse">
-                                <AlertTriangle size={16} className="text-yellow-300"/>
-                                <span className="font-bold text-sm">{expiringCount} 張快過期</span>
-                            </div>
-                        )}
-                    </div>
-                    
-                    {isOpen && (
-                        <div className="grid grid-cols-3 gap-2 mt-4 relative z-10 border-t border-white/20 pt-3">
-                            <div className="text-center"><div className="text-xs opacity-70">今日新增</div><div className="font-bold">{tasks.filter(t=> { const d = t.createdAt?.seconds ? new Date(t.createdAt.seconds*1000) : new Date(); return d.toDateString() === new Date().toDateString() }).length}</div></div>
-                            <div className="text-center"><div className="text-xs opacity-70">已完成</div><div className="font-bold">{completedCount}</div></div>
-                            <div className="text-center"><div className="text-xs opacity-70">垃圾桶</div><div className="font-bold">{tasks.filter(t=>t.isDeleted).length}</div></div>
-                        </div>
-                    )}
-                </div>
-            );
-        };
-
-        const BottomNav = ({ view, setView, counts }) => (
-            <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 pb-safe pt-2 px-6 flex justify-between items-end z-40 h-[60px] pb-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                <button onClick={() => setView('active')} className={`flex flex-col items-center gap-1 w-16 transition-colors ${view === 'active' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
-                    <ListTodo size={24} strokeWidth={view === 'active' ? 2.5 : 2} />
-                    <span className="text-[10px] font-medium">待辦</span>
-                    {counts.active > 0 && <span className="absolute top-2 ml-6 bg-blue-500 text-white text-[10px] px-1.5 rounded-full min-w-[16px] text-center">{counts.active}</span>}
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
+                    進入系統 <i data-lucide="arrow-right" class="w-4 h-4"></i>
                 </button>
-                <button onClick={() => setView('completed')} className={`flex flex-col items-center gap-1 w-16 transition-colors ${view === 'completed' ? 'text-green-600 dark:text-green-400' : 'text-slate-400'}`}>
-                    <CheckCircle2 size={24} strokeWidth={view === 'completed' ? 2.5 : 2} />
-                    <span className="text-[10px] font-medium">完成</span>
+            </form>
+            <p class="mt-6 text-center text-[10px] text-dark-subtext opacity-50">
+                Connected to Project: task-71198
+            </p>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="main-app" class="w-full max-w-lg mx-auto space-y-6 p-4 md:p-8 pb-24 hidden">
+        
+        <!-- Header -->
+        <header class="flex flex-col gap-3 bg-dark-card border border-dark-border p-3 rounded-xl shadow-lg relative overflow-hidden">
+            <!-- ID Badge -->
+            <button onclick="handleLogout()" class="absolute top-2 right-2 px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext hover:text-white hover:bg-red-900/30 transition-colors flex items-center gap-1 group" title="登出">
+                <span class="font-mono" id="workspace-id-display">...</span>
+                <i data-lucide="log-out" class="w-3 h-3 group-hover:text-red-400"></i>
+            </button>
+
+            <div class="flex justify-between items-center mt-1">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-900/50">
+                        <i data-lucide="command" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">
+                            COMMAND CTR
+                        </h1>
+                        <div class="flex items-center gap-2 text-[10px] text-dark-subtext font-mono">
+                            <span id="header-time-text" class="text-emerald-400 font-bold">--:--:--</span>
+                            <span>•</span>
+                            <span id="date-text">--/--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Warning for Popups (Small icon) -->
+                <div id="popup-warning-icon" class="hidden text-amber-500 animate-pulse mr-12" title="Popups blocked">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                </div>
+            </div>
+
+            <!-- Button Switcher -->
+            <div class="flex bg-dark-bg p-1 rounded-lg border border-dark-border overflow-x-auto no-scrollbar">
+                <button id="btn-view-tracker" onclick="switchView('tracker')" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0">
+                    <i data-lucide="list-todo" class="w-3 h-3"></i> TASKS
                 </button>
-                <button onClick={() => setView('deleted')} className={`flex flex-col items-center gap-1 w-16 transition-colors ${view === 'deleted' ? 'text-red-500' : 'text-slate-400'}`}>
-                    <Trash size={24} strokeWidth={view === 'deleted' ? 2.5 : 2} />
-                    <span className="text-[10px] font-medium">回收</span>
+                <button id="btn-view-timer" onclick="switchView('timer')" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0">
+                    <i data-lucide="timer" class="w-3 h-3"></i> TIMER
+                </button>
+                <!-- Mutual Mode Button -->
+                <button onclick="openMutualModal()" class="ml-auto px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center gap-1 shrink-0">
+                    <i data-lucide="users" class="w-3 h-3"></i> 互助
                 </button>
             </div>
-        );
+        </header>
 
-        const AddTaskModal = ({ isOpen, onClose, onAdd, tags, onManageTags }) => {
-            const [mode, setMode] = useState('paste'); // paste | manual
-            const [pasteVal, setPasteVal] = useState('');
-            const [manualName, setManualName] = useState('');
-            const [manualSerial, setManualSerial] = useState('');
-            const [manualExpiry, setManualExpiry] = useState('');
-            const [manualNote, setManualNote] = useState('');
-            const [manualUrl, setManualUrl] = useState('');
-            const [manualTag, setManualTag] = useState('default');
-            const [pendingImage, setPendingImage] = useState('');
-            const fileInputRef = useRef(null);
+        <!-- ==================== TRACKER VIEW (Default) ==================== -->
+        <div id="view-tracker" class="view-section space-y-6">
+            <div class="flex justify-between items-end">
+                <h2 class="text-sm font-bold text-dark-subtext tracking-wider uppercase whitespace-nowrap mr-2">Cloud Routine</h2>
+                
+                <!-- Buttons Toolbar -->
+                <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar justify-end w-full">
+                    
+                    <!-- Select All -->
+                    <button onclick="toggleSelectAll()" id="btn-select-all" class="text-xs bg-dark-card border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0">
+                        <i data-lucide="check-square" class="w-3 h-3"></i> ALL
+                    </button>
+                    
+                    <!-- Delete Selected (Hidden by default) -->
+                    <button onclick="deleteSelectedTasks()" id="btn-delete-selected" class="hidden text-xs bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-500 px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0">
+                        <i data-lucide="trash-2" class="w-3 h-3"></i> DEL
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Warning for Popups -->
+            <div id="popup-warning" class="hidden bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex items-start gap-3">
+                <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0"></i>
+                <div class="text-xs text-amber-200">
+                    <strong class="block mb-1 text-amber-400">Pop-up Blocked</strong>
+                    Your browser blocked the auto-open. Please allow pop-ups for this site in your browser settings.
+                    <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="block mt-2 underline text-amber-400/70 hover:text-amber-400">Dismiss</button>
+                </div>
+            </div>
 
-            useEffect(() => {
-                if(isOpen) {
-                    setPasteVal(''); setManualName(''); setManualSerial(''); 
-                    setManualExpiry(''); setManualNote(''); setManualUrl(''); 
-                    setManualTag('default'); setPendingImage(''); setMode('paste');
-                }
-            }, [isOpen]);
+            <div id="tracker-list" class="space-y-3 pb-8"></div>
+            <div id="tracker-empty" class="hidden py-12 text-center opacity-40 select-none">
+                <div class="relative w-12 h-12 mx-auto mb-3">
+                    <i data-lucide="cloud" class="w-12 h-12 text-dark-subtext opacity-50 absolute"></i>
+                    <i data-lucide="activity" class="w-6 h-6 text-blue-500 absolute top-3 left-3 animate-pulse"></i>
+                </div>
+                <p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">Waiting for Cloud Data...</p>
+            </div>
+        </div>
 
-            if(!isOpen) return null;
+        <!-- ==================== TIMER VIEW ==================== -->
+        <div id="view-timer" class="view-section hidden space-y-5">
+            <!-- Stats Bar -->
+            <div class="grid grid-cols-2 gap-4 text-xs font-mono">
+                <div>
+                    <div class="flex justify-between mb-1 text-dark-subtext">
+                        <span>SYSTEM TIME</span>
+                        <span id="seconds-text" class="text-blue-400">00</span>
+                    </div>
+                    <div class="h-1.5 w-full bg-dark-border rounded-full overflow-hidden">
+                        <div id="seconds-bar" class="h-full bg-blue-500/80 w-0 transition-all duration-1000"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between mb-1 text-dark-subtext">
+                        <span>ACTIVE TASKS</span>
+                        <span id="active-count" class="text-white">0</span>
+                    </div>
+                    <div class="h-1.5 w-full bg-dark-border rounded-full overflow-hidden">
+                        <div id="tasks-bar" class="h-full bg-emerald-500/80 w-0 transition-all duration-500"></div>
+                    </div>
+                </div>
+            </div>
 
-            const handleSubmit = () => {
-                onAdd({ mode, pasteVal, manualName, manualSerial, manualExpiry, manualNote, manualUrl, manualTag, pendingImage });
-                onClose();
-            };
+            <!-- Global Delay Config -->
+            <div class="bg-dark-card border border-dark-border rounded-lg p-3 flex justify-between items-center shadow-sm">
+                <div class="flex items-center gap-2 text-amber-400">
+                    <i data-lucide="hourglass" class="w-4 h-4"></i>
+                    <span class="text-xs font-bold uppercase tracking-wider text-dark-subtext">Delay Buffer</span>
+                </div>
+                <div class="flex items-center bg-dark-bg border border-dark-border rounded px-2 py-1 gap-2 focus-within:border-amber-400 transition-colors">
+                    <input type="number" id="global-delay" value="0" min="0" inputmode="numeric" 
+                        class="bg-transparent text-right font-mono text-sm font-bold text-white w-12 outline-none" placeholder="0">
+                    <span class="text-[10px] font-bold text-dark-subtext">MIN</span>
+                </div>
+            </div>
 
-            const handleImage = async (e) => {
-                const file = e.target.files[0];
-                if(file) setPendingImage(await compressImage(file));
-            };
+            <!-- Timer Input Form -->
+            <form id="timer-form" class="space-y-3">
+                <div class="relative group">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i data-lucide="plus" class="h-4 w-4 text-dark-subtext group-focus-within:text-blue-400"></i>
+                    </div>
+                    <input type="text" id="t-label" placeholder="New timer name..." autocomplete="off"
+                        class="block w-full pl-10 pr-4 py-3 bg-dark-card border border-dark-border rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white transition-all shadow-sm">
+                </div>
+                
+                <div class="grid grid-cols-4 gap-2">
+                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors">
+                        <label class="text-[9px] text-dark-subtext font-bold block mb-1">HR</label>
+                        <input type="number" id="t-h" placeholder="0" min="0" inputmode="numeric" pattern="[0-9]*" 
+                            class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700">
+                    </div>
+                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors">
+                        <label class="text-[9px] text-dark-subtext font-bold block mb-1">MIN</label>
+                        <input type="number" id="t-m" placeholder="0" min="0" max="59" inputmode="numeric" pattern="[0-9]*" 
+                            class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700">
+                    </div>
+                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors">
+                        <label class="text-[9px] text-dark-subtext font-bold block mb-1">SEC</label>
+                        <input type="number" id="t-s" placeholder="0" min="0" max="59" inputmode="numeric" pattern="[0-9]*" 
+                            class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700">
+                    </div>
+                    <button type="submit" id="t-submit" class="bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center transition-all shadow-lg shadow-blue-900/30 active:scale-95">
+                        <i data-lucide="play" class="w-6 h-6 fill-current"></i>
+                    </button>
+                </div>
+            </form>
 
-            const handlePaste = async (e) => {
-                const text = e.clipboardData.getData('text/plain');
-                const items = e.clipboardData.items;
-                let imageBlob = null;
+            <div class="border-t border-dark-border/50"></div>
+            <div id="timers-container" class="space-y-4 pb-12"></div>
+            
+            <div id="timer-empty" class="hidden py-12 text-center opacity-40 select-none">
+                <i data-lucide="clock" class="w-12 h-12 mx-auto mb-3 text-dark-subtext"></i>
+                <p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">No Active Timers</p>
+            </div>
+        </div>
 
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    if (item.type.indexOf('image') !== -1 || (item.kind === 'file' && item.type.includes('image'))) {
-                        imageBlob = item.getAsFile();
-                        if (imageBlob) break; 
-                    }
-                }
+    </div>
 
-                if (imageBlob) {
-                    e.preventDefault(); 
-                    try {
-                        const compressed = await compressImage(imageBlob);
-                        setPendingImage(compressed);
-                    } catch (err) {
-                        console.error("Paste image error", err);
-                    }
-                    if (text) {
-                        setPasteVal(prev => prev + (prev ? '\n' : '') + text);
-                    }
-                } 
-            };
+    <!-- FAB -->
+    <button id="fab-new-task" onclick="openTrackerModal()" 
+        class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group hidden">
+        <i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i>
+    </button>
 
-            return (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center animate-in" onClick={onClose}>
-                    <div className="bg-white dark:bg-slate-800 w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold dark:text-white">新增票券</h2>
-                            <button onClick={onClose} className="bg-slate-100 dark:bg-slate-700 p-1 rounded-full text-slate-500"><X size={20}/></button>
-                        </div>
-
-                        <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-xl mb-4">
-                            <button onClick={()=>setMode('paste')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'paste' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500'}`}>智慧貼上</button>
-                            <button onClick={()=>setMode('manual')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'manual' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-500'}`}>手動輸入</button>
-                        </div>
-
-                        {mode === 'paste' ? (
-                            <div className="space-y-3">
-                                <div className="relative">
-                                    <textarea 
-                                        value={pasteVal} 
-                                        onChange={e=>setPasteVal(e.target.value)} 
-                                        onPaste={handlePaste} 
-                                        placeholder="在此貼上簡訊文字、票券內容、或直接貼上圖片..." 
-                                        className="w-full h-32 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none resize-none dark:text-white focus:ring-2 focus:ring-blue-500 transition-all" 
-                                        autoFocus 
-                                    />
-                                    <div className="absolute bottom-3 right-3 pointer-events-none">
-                                        <div className="bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-[10px] px-2 py-1 rounded-md opacity-70">
-                                            支援 Ctrl+V 貼上圖片
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div className="text-xs text-slate-400 text-center">或</div>
-                                <div className="flex gap-2 justify-center">
-                                    <button onClick={()=>fileInputRef.current.click()} className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-xl text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200"><ImageIcon size={16}/> 上傳圖片</button>
-                                    <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImage} />
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                <input value={manualName} onChange={e=>setManualName(e.target.value)} placeholder="品名 (必填)" className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none font-bold dark:text-white"/>
-                                <div className="flex gap-2">
-                                    <select value={manualTag} onChange={e=>setManualTag(e.target.value)} className="flex-1 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm dark:text-white">
-                                        <option value="default">未分類</option>
-                                        {tags.map(t=><option key={t} value={t}>{t}</option>)}
-                                    </select>
-                                    <button onClick={onManageTags} className="px-3 bg-slate-100 dark:bg-slate-700 rounded-xl text-blue-500"><FolderPlus size={18}/></button>
-                                </div>
-                                <div className="flex gap-2">
-                                    <input value={manualExpiry} onChange={e=>setManualExpiry(e.target.value)} placeholder="期限 (YYYY/MM/DD)" className="flex-1 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm dark:text-white"/>
-                                    <input value={manualSerial} onChange={e=>setManualSerial(e.target.value)} placeholder="序號" className="flex-1 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm font-mono dark:text-white"/>
-                                </div>
-                                <input value={manualUrl} onChange={e=>setManualUrl(e.target.value)} placeholder="相關網址 (選填)" className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm dark:text-white"/>
-                                <textarea value={manualNote} onChange={e=>setManualNote(e.target.value)} placeholder="備註..." className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl outline-none text-sm h-20 resize-none dark:text-white"/>
-                            </div>
-                        )}
-
-                        {pendingImage && (
-                            <div className="mt-3 relative inline-block animate-in">
-                                <div className="border-2 border-blue-500 rounded-lg overflow-hidden">
-                                    <img src={pendingImage} className="h-20 object-cover"/>
-                                </div>
-                                <button onClick={()=>setPendingImage('')} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors"><X size={12}/></button>
-                                <div className="absolute bottom-0 right-0 bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-tl-md">圖片已就緒</div>
-                            </div>
-                        )}
-
-                        <button onClick={handleSubmit} disabled={mode==='paste' ? (!pasteVal && !pendingImage) : !manualName} className="w-full mt-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-200 dark:shadow-none flex items-center justify-center gap-2">
-                            <Plus size={20}/> 建立票券
+    <!-- Tracker Modal -->
+    <div id="tracker-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity">
+        <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
+            <h3 id="modal-title" class="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                <i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i>
+                <span>Edit Task</span>
+            </h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">Title</label>
+                    <input type="text" id="modal-name" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none transition-colors">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">URL</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="modal-url" placeholder="Paste link here..." class="flex-1 min-w-0 bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors">
+                        <button type="button" onclick="pasteToUrl()" class="bg-dark-input border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white rounded-lg px-3 transition-colors flex items-center justify-center shadow-sm">
+                            <i data-lucide="clipboard-paste" class="w-4 h-4"></i>
                         </button>
                     </div>
                 </div>
-            );
-        };
-
-        const TagManagerModal = ({ isOpen, onClose, tags, onAddTag, onDeleteTag, onRenameTag }) => {
-            const [newTag, setNewTag] = useState('');
-            const [editingTag, setEditingTag] = useState(null); 
-            const [editValue, setEditValue] = useState(''); 
-            if (!isOpen) return null;
-            const startEdit = (tag) => { setEditingTag(tag); setEditValue(tag); };
-            const saveEdit = () => { if (editValue.trim() && editValue !== editingTag) { onRenameTag(editingTag, editValue.trim()); } setEditingTag(null); };
-            
-            return (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-slate-100 dark:border-slate-700">
-                        <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-bold flex items-center gap-2 dark:text-white"><FolderPlus size={20} className="text-blue-600 dark:text-blue-400"/> 管理標籤</h2><button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600"/></button></div>
-                        <div className="flex gap-2 mb-4"><input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value)} placeholder="新標籤名稱" className="flex-1 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" /><button onClick={() => { if(newTag.trim()) { onAddTag(newTag.trim()); setNewTag(''); } }} className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700"><Plus size={18}/></button></div>
-                        <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                            {tags.length === 0 ? <p className="text-slate-400 text-sm text-center py-8">尚無自訂標籤</p> : tags.map(tag => (
-                                <div key={tag} className="flex justify-between items-center bg-slate-50 dark:bg-slate-700/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-700 group">
-                                    {editingTag === tag ? (
-                                        <div className="flex gap-2 flex-1 items-center"><input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} className="flex-1 bg-white dark:bg-slate-600 px-2 py-1 rounded border border-blue-300 outline-none text-sm dark:text-white" autoFocus /><button onClick={saveEdit} className="text-green-600 hover:bg-green-50 p-1 rounded"><Check size={16}/></button><button onClick={() => setEditingTag(null)} className="text-slate-400 hover:bg-slate-100 p-1 rounded"><X size={16}/></button></div>
-                                    ) : (
-                                        <><span className="text-slate-700 dark:text-slate-200 font-medium text-sm pl-1">{tag}</span><div className="flex gap-1"><button onClick={() => startEdit(tag)} className="text-slate-400 hover:text-blue-600 p-1.5 hover:bg-blue-50 dark:hover:bg-slate-600 rounded"><Pencil size={14}/></button><button onClick={() => { if(confirm(`確定刪除標籤「${tag}」嗎？`)) onDeleteTag(tag); }} className="text-slate-400 hover:text-red-600 p-1.5 hover:bg-red-50 dark:hover:bg-slate-600 rounded"><Trash2 size={14}/></button></div></>
-                                    )}
-                                </div>
-                            ))}
+                <div>
+                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 flex items-center gap-2">
+                        <span>Auto Open At (24h)</span>
+                    </label>
+                    <div class="relative">
+                        <input type="time" id="modal-schedule" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors">
+                        <div class="absolute right-3 top-2 pointer-events-none text-dark-subtext">
+                            <i data-lucide="clock" class="w-4 h-4"></i>
                         </div>
                     </div>
                 </div>
-            );
-        };
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-6">
+                <button onclick="closeTrackerModal()" class="py-2.5 text-xs font-bold text-dark-subtext hover:bg-white/5 rounded-lg transition-colors">CANCEL</button>
+                <button onclick="saveTrackerTask()" class="py-2.5 text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 rounded-lg shadow-lg transition-colors">SAVE CLOUD</button>
+            </div>
+        </div>
+    </div>
 
-        const MigrationModal = ({ isOpen, onClose, currentSpaceId, onMigrate }) => {
-            const [targetId, setTargetId] = useState('');
-            if (!isOpen) return null;
-            return (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-100 dark:border-slate-700">
-                        <h2 className="text-xl font-bold mb-2 dark:text-white">資料搬家 (複製)</h2>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">將目前空間的所有資料複製到另一個空間 ID。</p>
-                        <input type="text" value={targetId} onChange={(e) => setTargetId(e.target.value)} placeholder="輸入目標空間代碼" className="w-full px-4 py-3 border rounded-xl mb-4 focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
-                        <div className="flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg dark:text-slate-400">取消</button><button onClick={() => onMigrate(targetId)} disabled={!targetId.trim()} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-lg font-medium">開始複製</button></div>
-                    </div>
+    <!-- Reset Menu Modal -->
+    <div id="reset-menu-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity">
+        <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
+            <h3 class="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                <i data-lucide="rotate-ccw" class="w-5 h-5 text-orange-400"></i>
+                <span>重置選項</span>
+            </h3>
+            <div class="space-y-3">
+                <button onclick="resetRound()" class="w-full py-3 bg-red-900/20 border border-red-500/30 hover:bg-red-900/40 text-red-400 font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> 全部重置 (清空歷史)
+                </button>
+                <button onclick="closeResetMenu()" class="w-full py-3 text-dark-subtext hover:text-white font-bold rounded-lg transition-colors">
+                    取消
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mutual Sign-in Modal (Cloud V3) -->
+    <div id="mutual-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity overflow-y-auto">
+        <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-lg p-6 relative max-h-[90vh] flex flex-col">
+            
+            <!-- Mutual Header -->
+            <div class="flex justify-between items-start mb-4 shrink-0">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i data-lucide="users" class="w-5 h-5 text-purple-400"></i>
+                        <span>互助簽到 (Cloud)</span>
+                    </h3>
+                    <p class="text-xs text-dark-subtext mt-1">資料已同步至雲端，全員可見</p>
                 </div>
-            );
-        };
-
-        const DataToolsModal = ({ isOpen, onClose, tasks, onRestore }) => {
-            const [activeTab, setActiveTab] = useState('backup');
-            const [restoreInput, setRestoreInput] = useState('');
-            const [restoreStatus, setRestoreStatus] = useState('');
-
-            if (!isOpen) return null;
-
-            const handleBackupCopy = async () => {
-                const dataStr = JSON.stringify(tasks);
-                const success = await copyToClipboard(dataStr);
-                if (success) { alert(`✅ 已複製 ${tasks.length} 筆資料 (含圖片) 到剪貼簿！`); } 
-                else { alert("❌ 複製失敗。請嘗試手動選取文字或改用「下載檔案」功能。"); }
-            };
-
-            const handleDownload = () => {
-                const dataStr = JSON.stringify(tasks, null, 2);
-                const blob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = `ticket_backup_${new Date().toISOString().split('T')[0]}.json`;
-                a.click(); URL.revokeObjectURL(url);
-            };
-
-            const handleRestoreParse = async () => {
-                try {
-                    setRestoreStatus('解析中...');
-                    const data = JSON.parse(restoreInput);
-                    if (!Array.isArray(data)) throw new Error("格式錯誤：必須是陣列");
-                    if(confirm(`⚠️ 確定要匯入 ${data.length} 筆資料嗎？\n現有的資料不會被刪除，將會新增這些備份資料。`)) {
-                        setRestoreStatus('匯入中...請稍候'); await onRestore(data);
-                        setRestoreStatus('✅ 匯入完成！'); setRestoreInput(''); setTimeout(onClose, 1500);
-                    } else { setRestoreStatus(''); }
-                } catch (e) { setRestoreStatus('❌ 格式錯誤，請確認貼上的是正確的 JSON 備份文字'); console.error(e); }
-            };
-
-            return (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-lg w-full p-0 overflow-hidden flex flex-col max-h-[90vh] border border-slate-100 dark:border-slate-700">
-                        <div className="p-4 border-b dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800">
-                            <h2 className="font-bold text-lg flex items-center gap-2 text-slate-700 dark:text-white"><Database size={20}/> 資料備份與還原</h2>
-                            <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
-                        </div>
-                        
-                        <div className="flex border-b dark:border-slate-700">
-                            <button onClick={() => setActiveTab('backup')} className={`flex-1 py-3 text-sm font-bold text-center transition-colors ${activeTab === 'backup' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>匯出 (備份)</button>
-                            <button onClick={() => setActiveTab('restore')} className={`flex-1 py-3 text-sm font-bold text-center transition-colors ${activeTab === 'restore' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-900/20' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>匯入 (還原)</button>
-                        </div>
-
-                        <div className="p-6 overflow-y-auto">
-                            {activeTab === 'backup' ? (
-                                <div className="space-y-4">
-                                    <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-xl border border-blue-100 dark:border-blue-800 text-center">
-                                        <div className="text-3xl font-black text-blue-600 dark:text-blue-400 mb-1">{tasks.length}</div>
-                                        <div className="text-xs text-blue-400 font-bold uppercase tracking-wider">目前總項目數</div>
-                                    </div>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">備份包含所有的票券資訊、備註、圖片與標籤。<br/>建議定期備份，或在切換裝置前進行備份。</p>
-                                    <div className="grid grid-cols-2 gap-3 mt-4">
-                                        <button onClick={handleBackupCopy} className="flex flex-col items-center justify-center gap-2 p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-blue-300 transition-all group">
-                                            <div className="bg-slate-100 dark:bg-slate-600 p-3 rounded-full group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors"><Copy size={24} className="dark:text-white"/></div>
-                                            <span className="text-sm font-bold text-slate-600 dark:text-slate-300">複製到剪貼簿</span>
-                                        </button>
-                                        <button onClick={handleDownload} className="flex flex-col items-center justify-center gap-2 p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-blue-300 transition-all group">
-                                            <div className="bg-slate-100 dark:bg-slate-600 p-3 rounded-full group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors"><Download size={24} className="dark:text-white"/></div>
-                                            <span className="text-sm font-bold text-slate-600 dark:text-slate-300">下載成檔案</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <textarea value={restoreInput} onChange={(e) => setRestoreInput(e.target.value)} placeholder="請在此貼上備份的文字內容 (JSON)..." className="w-full h-40 p-3 border rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none resize-none bg-slate-50 dark:bg-slate-900 dark:border-slate-700 dark:text-white"></textarea>
-                                    {restoreStatus && <div className={`text-sm font-bold text-center ${restoreStatus.includes('❌') ? 'text-red-500' : 'text-blue-600'}`}>{restoreStatus}</div>}
-                                    <button onClick={handleRestoreParse} disabled={!restoreInput.trim()} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"><FileJson size={18}/> 開始還原</button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const App = () => {
-            const [user, setUser] = useState(null);
-            const [workspaceId, setWorkspaceId] = useState(() => localStorage.getItem('ticket_workspace_id') || '');
-            const [tasks, setTasks] = useState([]);
-            const [tags, setTags] = useState([]); 
-            const [isJoined, setIsJoined] = useState(false);
-            const [loading, setLoading] = useState(true);
-            const [authError, setAuthError] = useState('');
-            
-            // UI States
-            const [viewStatus, setViewStatus] = useState('active'); 
-            const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('pref_theme') === 'dark');
-            const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-            const [searchQuery, setSearchQuery] = useState('');
-            const [currentTagFilter, setCurrentTagFilter] = useState('all');
-            const [expiryThreshold, setExpiryThreshold] = useState(() => parseInt(localStorage.getItem('pref_expiryThreshold') || '30'));
-            const [sortType, setSortType] = useState('newest');
-            
-            // Modals & Selection
-            const [isSelectionMode, setIsSelectionMode] = useState(false);
-            const [selectedTasks, setSelectedTasks] = useState(new Set());
-            const [showTagManager, setShowTagManager] = useState(false);
-            const [showMigration, setShowMigration] = useState(false);
-            const [showDataTools, setShowDataTools] = useState(false);
-            const [showSettings, setShowSettings] = useState(false); 
-            const [isMigrating, setIsMigrating] = useState(false);
-
-            // Notification States (SYNCED FROM CLOUD)
-            const [tgToken, setTgToken] = useState('');
-            const [tgChatId, setTgChatId] = useState('');
-            const [notifyDays, setNotifyDays] = useState(7);
-
-            // Effects
-            useEffect(() => {
-                if (isDarkMode) document.documentElement.classList.add('dark');
-                else document.documentElement.classList.remove('dark');
-                localStorage.setItem('pref_theme', isDarkMode ? 'dark' : 'light');
-            }, [isDarkMode]);
-
-            // Auth & Data Fetching (Tickets + Tags + SETTINGS)
-            useEffect(() => {
-                const initAuth = async () => { if (!auth) return; try { await signInAnonymously(auth); } catch (e) { setAuthError(e.message); } };
-                initAuth();
-                if (auth) { const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); if (u) setAuthError(''); if (workspaceId) setIsJoined(true); }); return () => unsubscribe(); } else { setLoading(false); }
-            }, []);
-
-            useEffect(() => {
-                if (!user || !workspaceId || !db) { setLoading(false); return; }
-                setLoading(true);
-                
-                // 1. Listen for Tasks
-                const q = query(collection(db, 'artifacts', appId, 'public', 'data', workspaceId), orderBy('createdAt', 'desc'));
-                const unsubscribe = onSnapshot(q, (snapshot) => {
-                    const loadedTasks = [];
-                    // Exclude config docs from task list
-                    snapshot.docs.forEach(doc => { 
-                        if (doc.id !== TAGS_DOC_ID && doc.id !== SETTINGS_DOC_ID) loadedTasks.push({ id: doc.id, ...doc.data() }); 
-                    });
-                    setTasks(loadedTasks);
-                    setLoading(false);
-                });
-
-                // 2. Listen for Tags
-                const tagDocRef = doc(db, 'artifacts', appId, 'public', 'data', workspaceId, TAGS_DOC_ID);
-                const unsubscribeTags = onSnapshot(tagDocRef, (docSnap) => { if (docSnap.exists()) setTags(docSnap.data().list || []); else setTags([]); });
-                
-                // 3. Listen for Settings (CLOUD SYNC)
-                const settingsDocRef = doc(db, 'artifacts', appId, 'public', 'data', workspaceId, SETTINGS_DOC_ID);
-                const unsubscribeSettings = onSnapshot(settingsDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        setTgToken(data.tgToken || '');
-                        setTgChatId(data.tgChatId || '');
-                        setNotifyDays(data.notifyDays || 7);
-                    }
-                });
-
-                return () => { unsubscribe(); unsubscribeTags(); unsubscribeSettings(); };
-            }, [user, workspaceId]);
-
-            // Save Settings to Cloud
-            const handleSaveSettings = async (newSettings) => {
-                if (!user) return;
-                try {
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', workspaceId, SETTINGS_DOC_ID), {
-                        tgToken: newSettings.tgToken,
-                        tgChatId: newSettings.tgChatId,
-                        notifyDays: newSettings.notifyDays
-                    }, { merge: true });
-                    alert("設定已同步至雲端！所有裝置將自動更新。");
-                } catch (e) {
-                    console.error("Save settings error", e);
-                    alert("儲存失敗");
-                }
-            };
-
-            // Filter Logic
-            const duplicateSerials = useMemo(() => {
-                const counts = new Map();
-                tasks.forEach(t => { if (!t.isDeleted && t.serial) { const s = t.serial.trim(); if (s) counts.set(s, (counts.get(s) || 0) + 1); } });
-                const duplicates = new Set();
-                counts.forEach((count, key) => { if (count > 1) duplicates.add(key); });
-                return duplicates;
-            }, [tasks]);
-
-            const processedTasks = useMemo(() => {
-                let result = [...tasks];
-                if (viewStatus === 'active') result = result.filter(t => !t.completed && !t.isDeleted);
-                else if (viewStatus === 'completed') result = result.filter(t => t.completed && !t.isDeleted);
-                else if (viewStatus === 'deleted') result = result.filter(t => t.isDeleted);
-
-                if (currentTagFilter !== 'all') {
-                    if (currentTagFilter === 'uncategorized') result = result.filter(t => !t.tag || t.tag === 'default');
-                    else result = result.filter(t => t.tag === currentTagFilter);
-                }
-
-                if (searchQuery.trim()) {
-                    const q = searchQuery.toLowerCase();
-                    result = result.filter(t => (t.productName||'').toLowerCase().includes(q) || (t.serial||'').toLowerCase().includes(q) || (t.tag||'').toLowerCase().includes(q));
-                }
-
-                result.sort((a, b) => {
-                    const isDupA = duplicateSerials.has(a.serial);
-                    const isDupB = duplicateSerials.has(b.serial);
-                    if (isDupA && !isDupB) return -1;
-                    if (!isDupA && isDupB) return 1;
-                    if (sortType === 'expiring') {
-                        if (a.expiry && b.expiry) return new Date(a.expiry.replace(/[\.\-]/g, '/')) - new Date(b.expiry.replace(/[\.\-]/g, '/'));
-                        if (a.expiry) return -1; 
-                        if (b.expiry) return 1;
-                        return 0;
-                    } else if (sortType === 'oldest') {
-                        return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
-                    } else { // 'newest'
-                        return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-                    }
-                });
-                
-                return result;
-            }, [tasks, viewStatus, currentTagFilter, searchQuery, sortType, duplicateSerials]);
-
-            // Handlers
-            const handleAddTask = async ({ mode, pasteVal, manualName, manualSerial, manualExpiry, manualNote, manualUrl, manualTag, pendingImage }) => {
-                if (!user) return;
-                let newTask = {};
-                if (mode === 'paste') {
-                    const parsed = parseTicketInfo(pasteVal);
-                    const name = parsed.productName || (pendingImage ? "圖片項目" : "未命名");
-                    newTask = { text: pasteVal, isTicket: parsed.isTicket || !!pendingImage, serial: parsed.serial, productName: name, expiry: parsed.expiry, completed: false, isDeleted: false, createdAt: serverTimestamp(), note: '', url: '', tag: manualTag, image: pendingImage };
-                } else {
-                    const fmtExpiry = manualExpiry ? manualExpiry.replace(/-/g, '/') : '';
-                    newTask = { text: manualName, isTicket: (!!manualSerial.trim() || !!pendingImage), serial: manualSerial.trim(), productName: manualName, expiry: fmtExpiry, completed: false, isDeleted: false, createdAt: serverTimestamp(), note: manualNote, url: manualUrl, tag: manualTag, image: pendingImage };
-                }
-                try { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', workspaceId), newTask); setViewStatus('active'); } 
-                catch (e) { alert("Error adding task"); }
-            };
-
-            const handleUpdateTicket = async (id, name, serial, expiry, image, url, note, tag) => { if (user) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', workspaceId, id), { productName: name, serial, expiry, image, url, note, tag }); };
-            
-            const handleToggleComplete = async (task) => { 
-                if (!user) return;
-                const newStatus = !task.completed;
-                if (newStatus === true && tgToken && tgChatId) {
-                    const msg = `🎫 *票券已使用完畢* \n\n📦 *品名*: ${task.productName || '未命名'} \n🔢 *序號*: \`${task.serial || '無'}\` \n📅 *期限*: ${task.expiry || '無'} \n⏰ *時間*: ${new Date().toLocaleString('zh-TW')}`;
-                    sendTelegramMessage(tgToken, tgChatId, msg);
-                }
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', workspaceId, task.id), { completed: newStatus, completedAt: newStatus ? serverTimestamp() : null }); 
-            };
-            
-            const handleDelete = async (id) => { if (user) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', workspaceId, id), { isDeleted: true, deletedAt: serverTimestamp() }); };
-            const handleRestore = async (task) => { if (user) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', workspaceId, task.id), { isDeleted: false, completed: false }); };
-            const handlePermanentDelete = async (id) => { if (user && confirm("永久刪除？")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', workspaceId, id)); };
-            
-            const handleBatchDelete = async () => { 
-                if (!user || !selectedTasks.size) return; 
-                const isRecycleBin = viewStatus === 'deleted';
-                const confirmMsg = isRecycleBin 
-                    ? `確定要永久刪除這 ${selectedTasks.size} 個項目嗎？\n此動作無法復原！`
-                    : `確定要將這 ${selectedTasks.size} 個項目移至回收桶嗎？`;
-                if(confirm(confirmMsg)) { 
-                    const batch = writeBatch(db); 
-                    selectedTasks.forEach(id => {
-                        const docRef = doc(db, 'artifacts', appId, 'public', 'data', workspaceId, id);
-                        if (isRecycleBin) batch.delete(docRef); else batch.update(docRef, { isDeleted: true });
-                    }); 
-                    await batch.commit(); 
-                    setIsSelectionMode(false); 
-                    setSelectedTasks(new Set()); 
-                }
-            };
-            
-            const handleSelectAll = () => {
-                if (processedTasks.length === 0) return;
-                const allSelected = processedTasks.every(task => selectedTasks.has(task.id));
-                const newSet = new Set(selectedTasks);
-                if (allSelected) processedTasks.forEach(task => newSet.delete(task.id));
-                else processedTasks.forEach(task => newSet.add(task.id));
-                setSelectedTasks(newSet);
-            };
-
-            const handleBatchRestore = async (data) => { if(!user) return; const batch = writeBatch(db); data.forEach(item => { const {id,...rest} = item; const ref = doc(collection(db, 'artifacts', appId, 'public', 'data', workspaceId)); batch.set(ref, {...rest, createdAt: serverTimestamp()}); }); await batch.commit(); };
-            
-            const handleSelect = (id) => { 
-                const newSet = new Set(selectedTasks); 
-                if (newSet.has(id)) newSet.delete(id); 
-                else newSet.add(id); 
-                setSelectedTasks(newSet); 
-            };
-
-            // 1. Login Notification Logic (Session based - still valid to use session storage for "this login")
-            useEffect(() => {
-                if (isJoined && tgToken && tgChatId) {
-                    const sessionKey = `joined_notified_${workspaceId}`;
-                    if (!sessionStorage.getItem(sessionKey)) {
-                        const msg = `🚀 *使用者登入通知* \n\n有人進入了空間: \`${workspaceId}\` \n⏰ 時間: ${new Date().toLocaleString('zh-TW')}`;
-                        sendTelegramMessage(tgToken, tgChatId, msg);
-                        sessionStorage.setItem(sessionKey, 'true');
-                    }
-                }
-            }, [isJoined, workspaceId, tgToken, tgChatId]); // Dependent on tgToken from cloud
-
-            // 2. Daily Expiry Notification Logic (Local Storage based date check)
-            useEffect(() => {
-                if (isJoined && tasks.length > 0 && tgToken && tgChatId) {
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    const lastCheck = localStorage.getItem('last_expiry_notify_date');
-                    
-                    if (lastCheck !== todayStr) {
-                        const expiringTasks = tasks.filter(t => !t.completed && !t.isDeleted && t.expiry && checkIsExpiringSoon(t.expiry, notifyDays));
-                        
-                        if (expiringTasks.length > 0) {
-                            let msg = `⚠️ *每日到期提醒 (${expiringTasks.length}筆)* \n`;
-                            msg += `設定天數: ${notifyDays} 天內 \n\n`;
-                            
-                            expiringTasks.slice(0, 10).forEach(t => {
-                                const days = getDaysRemaining(t.expiry);
-                                msg += `🔸 ${t.productName} (剩 ${days} 天) \n`;
-                            });
-                            
-                            if (expiringTasks.length > 10) msg += `...還有 ${expiringTasks.length - 10} 筆`;
-
-                            sendTelegramMessage(tgToken, tgChatId, msg);
-                        }
-                        localStorage.setItem('last_expiry_notify_date', todayStr);
-                    }
-                }
-            }, [isJoined, tasks, tgToken, tgChatId, notifyDays]); // Dependent on tgToken/notifyDays from cloud
-
-            // Render
-            if (!isJoined) return <LoginScreen onJoin={(id)=>{setWorkspaceId(id); localStorage.setItem('ticket_workspace_id', id); setIsJoined(true);}} authError={authError} />;
-
-            return (
-                <div className="min-h-screen bg-slate-100 dark:bg-slate-900 pb-32">
-                    {/* Top Header */}
-                    <div className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-                        <div className="max-w-3xl mx-auto px-4 py-3">
-                            <div className="flex justify-between items-center mb-3">
-                                <h1 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center gap-2">
-                                    <span className="bg-blue-600 text-white p-1.5 rounded-lg"><Calendar size={18}/></span> 票券管家
-                                </h1>
-                                <div className="flex items-center gap-3">
-                                    <button onClick={()=>setIsDarkMode(!isDarkMode)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-                                        {isDarkMode ? <Sun size={20} className="text-yellow-400"/> : <Moon size={20}/>}
-                                    </button>
-                                    <div className="relative group">
-                                        <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500"><MoreVertical size={20}/></button>
-                                        <div className="absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-xl p-1 min-w-[150px] hidden group-hover:block z-50">
-                                            <div className="px-3 py-2 text-xs font-bold text-slate-400 border-b border-slate-100 dark:border-slate-700 mb-1">ID: {workspaceId}</div>
-                                            <button onClick={() => setShowSettings(true)} className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-700 rounded-lg flex gap-2"><BellRing size={16} /> 通知設定</button>
-                                            <button onClick={() => setShowDataTools(true)} className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-700 rounded-lg flex gap-2"><Database size={16} /> 備份還原</button>
-                                            <button onClick={() => setShowMigration(true)} className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-700 rounded-lg flex gap-2"><ArrowRightLeft size={16} /> 搬家</button>
-                                            <button onClick={() => { localStorage.removeItem('ticket_workspace_id'); setIsJoined(false); }} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex gap-2"><LogIn size={16}/> 登出</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            {/* Search Bar */}
-                            <div className="relative w-full">
-                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="搜尋..." className="w-full pl-9 pr-2 py-2 text-sm bg-slate-100 dark:bg-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="max-w-3xl mx-auto px-4 py-4">
-                        {/* Dashboard */}
-                        {viewStatus === 'active' && <Dashboard tasks={tasks} expiryThreshold={expiryThreshold} />}
-
-                        {/* Filter Bar */}
-                        <div className="mb-4">
-                            <div className="flex gap-2 overflow-x-auto no-scrollbar items-center pb-1">
-                                <button onClick={() => setCurrentTagFilter('all')} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${currentTagFilter === 'all' ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>全部</button>
-                                {tags.map(tag => (
-                                    <button key={tag} onClick={() => setCurrentTagFilter(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap flex items-center gap-1 border transition-colors ${currentTagFilter === tag ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
-                                        <Tag size={10} /> {tag}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Sorting & Config Bar */}
-                        <div className="flex justify-between items-center mb-4">
-                            <div className="flex items-center gap-2">
-                                <button onClick={()=>setIsSelectionMode(!isSelectionMode)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${isSelectionMode ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}>{isSelectionMode ? '完成選取' : '多選'}</button>
-                                
-                                {isSelectionMode && (
-                                    <button 
-                                        onClick={handleSelectAll} 
-                                        className="text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 flex items-center gap-1 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors"
-                                    >
-                                        <CheckSquareIcon size={12}/> 
-                                        {processedTasks.length > 0 && processedTasks.every(t => selectedTasks.has(t.id)) ? '取消全選' : '全選'}
-                                    </button>
-                                )}
-
-                                {isSelectionMode && selectedTasks.size > 0 && (
-                                    <button onClick={handleBatchDelete} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 flex items-center gap-1">
-                                        <Trash size={12}/> 
-                                        {viewStatus === 'deleted' ? '永久刪除' : '刪除'} 
-                                        ({selectedTasks.size})
-                                    </button>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-md border border-amber-100 dark:border-amber-800/30">
-                                    <Clock size={12} className="text-amber-500" />
-                                    <select value={expiryThreshold} onChange={(e) => setExpiryThreshold(parseInt(e.target.value))} className="bg-transparent outline-none font-bold text-amber-800 dark:text-amber-500 text-[10px]"><option value="7">7天</option><option value="14">14天</option><option value="30">30天</option><option value="90">90天</option></select>
-                                </div>
-                                <select value={sortType} onChange={(e)=>setSortType(e.target.value)} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-xs rounded-lg py-1.5 px-2 outline-none font-bold">
-                                    <option value="newest">最新</option><option value="expiring">快到期</option><option value="oldest">最早</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* List */}
-                        {loading ? (
-                            <div className="text-center py-20 text-slate-400 animate-pulse">載入中...</div>
-                        ) : processedTasks.length === 0 ? (
-                            <div className="text-center py-20 opacity-50">
-                                <div className="bg-slate-200 dark:bg-slate-700 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4"><ListTodo size={40} className="text-slate-400 dark:text-slate-500"/></div>
-                                <p className="text-slate-400 dark:text-slate-500 font-bold">這裡空空如也</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-1">
-                                {processedTasks.map(task => (
-                                    <TaskItem 
-                                        key={task.id} 
-                                        task={task} 
-                                        tags={tags} 
-                                        onToggle={handleToggleComplete} 
-                                        onDelete={handleDelete} 
-                                        onRestore={handleRestore} 
-                                        onPermanentDelete={handlePermanentDelete} 
-                                        onUpdateTicket={handleUpdateTicket} 
-                                        isSelectionMode={isSelectionMode} 
-                                        isSelected={selectedTasks.has(task.id)} 
-                                        onSelect={handleSelect} 
-                                        expiryThreshold={expiryThreshold} 
-                                        isDuplicate={duplicateSerials.has(task.serial)} 
-                                        isDarkMode={isDarkMode} 
-                                        onManageTags={() => setShowTagManager(true)}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* FAB (Add Button) */}
-                    <button 
-                        onClick={() => setIsAddModalOpen(true)}
-                        className="fixed bottom-24 right-5 bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-full shadow-xl shadow-blue-600/40 flex items-center justify-center z-40 transition-transform active:scale-90"
-                    >
-                        <Plus size={28} />
+                <div class="flex gap-2">
+                     <button onclick="toggleMutualSettings()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10" title="設定名單與目標">
+                        <i data-lucide="settings" class="w-5 h-5"></i>
                     </button>
-
-                    {/* Bottom Nav */}
-                    <BottomNav view={viewStatus} setView={setViewStatus} counts={{ active: tasks.filter(t=>!t.completed && !t.isDeleted).length }} />
-                    
-                    {/* Modals */}
-                    <AddTaskModal isOpen={isAddModalOpen} onClose={()=>setIsAddModalOpen(false)} onAdd={handleAddTask} tags={tags} onManageTags={() => setShowTagManager(true)} />
-                    <TagManagerModal isOpen={showTagManager} onClose={() => setShowTagManager(false)} tags={tags} onAddTag={async(t)=>{if(!tags.includes(t)) await setDoc(doc(db,'artifacts',appId,'public','data',workspaceId,TAGS_DOC_ID),{list:[...tags,t]},{merge:true})}} onDeleteTag={async(t)=>{await setDoc(doc(db,'artifacts',appId,'public','data',workspaceId,TAGS_DOC_ID),{list:tags.filter(x=>x!==t)},{merge:true});}} onRenameTag={async(o,n)=>{/*Simplified for brevity*/}} />
-                    {showMigration && <MigrationModal isOpen={showMigration} onClose={() => setShowMigration(false)} currentSpaceId={workspaceId} onMigrate={async(tid)=>{/*Simplified*/}}/>}
-                    {showDataTools && <DataToolsModal isOpen={showDataTools} onClose={() => setShowDataTools(false)} tasks={tasks} onRestore={handleBatchRestore}/>}
-                    {showSettings && <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} tgToken={tgToken} setTgToken={setTgToken} tgChatId={tgChatId} setTgChatId={setTgChatId} notifyDays={notifyDays} setNotifyDays={setNotifyDays} onSave={handleSaveSettings} />}
+                    <button onclick="showResetMenu()" class="text-dark-subtext hover:text-orange-400 p-1 rounded hover:bg-white/10" title="重置選單">
+                        <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+                    </button>
+                    <button onclick="closeMutualModal()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
                 </div>
-            );
+            </div>
+
+            <!-- Settings View (Hidden by default) -->
+            <div id="mutual-settings" class="hidden flex-1 flex flex-col mb-4 overflow-y-auto no-scrollbar">
+                <div class="bg-dark-card border border-dark-border rounded-lg p-4 flex-1 space-y-4">
+                    <div>
+                        <label class="text-xs font-bold text-white uppercase mb-2 block flex justify-between">
+                            <span>目標次數 (Target)</span>
+                            <span class="text-emerald-400 font-mono" id="target-display">3</span>
+                        </label>
+                        <input type="number" id="mutual-target-input" value="3" min="1" class="w-full bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none transition-colors">
+                        <p class="text-[10px] text-dark-subtext mt-1">當累積幫助人數達到此數字，顯示「本輪完成」。</p>
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-white uppercase mb-2 block">編輯名單 (一行一個名字)</label>
+                        <textarea id="mutual-names-input" class="w-full h-32 bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none resize-none" placeholder="A&#10;B&#10;C&#10;D&#10;E"></textarea>
+                    </div>
+                    <button onclick="saveMutualConfig()" class="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg transition-colors shadow-lg">儲存設定</button>
+                </div>
+            </div>
+
+            <!-- Quick Helper Selector (One Click Mark) -->
+            <div id="mutual-quick-helper" class="mb-4 bg-dark-input/50 rounded-lg p-3 border border-dark-border shrink-0">
+                <p class="text-[10px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-1">
+                    <i data-lucide="zap" class="w-3 h-3"></i>
+                    今日值日生 (一鍵標記所有人)
+                </p>
+                <div id="mutual-helper-buttons" class="flex flex-wrap gap-2">
+                    <!-- Buttons injected by JS -->
+                </div>
+            </div>
+
+            <!-- List View -->
+            <div id="mutual-list" class="space-y-4 overflow-y-auto no-scrollbar flex-1 pr-1 pb-2">
+                <!-- Cards will be injected here -->
+            </div>
+            
+        </div>
+    </div>
+
+    <script>
+        // --- Utilities ---
+        const pad = (num) => String(num).padStart(2, '0');
+        const formatTime = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        const formatTimeWithSeconds = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        const getTaipeiDate = () => new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+
+        // --- DOM Elements ---
+        const viewTimer = document.getElementById('view-timer');
+        const viewTracker = document.getElementById('view-tracker');
+        const headerTime = document.getElementById('header-time-text');
+        const headerDate = document.getElementById('date-text');
+        const btnTracker = document.getElementById('btn-view-tracker');
+        const btnTimer = document.getElementById('btn-view-timer');
+        const popupWarning = document.getElementById('popup-warning');
+        const popupWarningIcon = document.getElementById('popup-warning-icon');
+        const fabButton = document.getElementById('fab-new-task'); 
+
+        // Inputs
+        const inputH = document.getElementById('t-h');
+        const inputM = document.getElementById('t-m');
+        const inputS = document.getElementById('t-s');
+        const btnSubmit = document.getElementById('t-submit');
+        const globalDelayInput = document.getElementById('global-delay');
+
+        // --- Init Delay Buffer ---
+        const savedDelay = localStorage.getItem('dashboard-global-delay');
+        if (savedDelay) {
+            globalDelayInput.value = savedDelay;
+        }
+        globalDelayInput.addEventListener('input', (e) => {
+            localStorage.setItem('dashboard-global-delay', e.target.value);
+        });
+
+        // --- View Switcher Logic ---
+        window.switchView = (viewName) => {
+            if (viewName === 'timer') {
+                viewTimer.classList.remove('hidden');
+                viewTracker.classList.add('hidden');
+                fabButton.classList.add('hidden');
+                
+                btnTimer.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0";
+                btnTracker.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0";
+            } else {
+                viewTimer.classList.add('hidden');
+                viewTracker.classList.remove('hidden');
+                viewTracker.classList.add('view-section'); 
+                fabButton.classList.remove('hidden');
+
+                btnTracker.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0";
+                btnTimer.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0";
+            }
         };
 
-        const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
+        // --- Auto-Jump Input Logic ---
+        const focusNext = (currentId) => {
+            if (currentId === 't-h') inputM.focus();
+            else if (currentId === 't-m') inputS.focus();
+            else if (currentId === 't-s') btnSubmit.focus();
+        };
+
+        [inputH, inputM, inputS].forEach(input => {
+            input.addEventListener('focus', function() { this.select(); });
+            input.addEventListener('input', function() {
+                const val = this.value;
+                if (this.id !== 't-h' && val.length >= 2) focusNext(this.id);
+            });
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (this.id === 't-s' || (this.value && this.id !== 't-s')) {
+                         if (this.id === 't-s') document.getElementById('timer-form').requestSubmit();
+                         else focusNext(this.id);
+                    }
+                }
+            });
+        });
+
+        // =======================
+        // PASTE LOGIC
+        // =======================
+        window.pasteToUrl = async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                const urlInput = document.getElementById('modal-url');
+                urlInput.value = text;
+                urlInput.focus();
+                urlInput.classList.add('border-green-500');
+                setTimeout(() => urlInput.classList.remove('border-green-500'), 500);
+            } catch (err) {
+                const urlInput = document.getElementById('modal-url');
+                urlInput.focus();
+                alert('瀏覽器安全性限制：請點擊輸入框並按下 Ctrl+V 貼上');
+            }
+        };
+
+        // =======================
+        // MUTUAL RELAY LOGIC (CLOUD V3)
+        // =======================
+        const mutualModalEl = document.getElementById('mutual-modal');
+        const mutualListEl = document.getElementById('mutual-list');
+        const mutualSettingsEl = document.getElementById('mutual-settings');
+        const mutualNamesInput = document.getElementById('mutual-names-input');
+        const mutualTargetInput = document.getElementById('mutual-target-input');
+        const mutualHelperButtonsEl = document.getElementById('mutual-helper-buttons');
+        const mutualQuickHelperEl = document.getElementById('mutual-quick-helper');
+        const resetMenuModalEl = document.getElementById('reset-menu-modal');
+
+        // Default structure
+        window.mutualData = {
+            target: 3,
+            names: ['A', 'B', 'C'],
+            users: {} 
+        };
+
+        window.saveMutual = () => {
+             // Wrapper to save to Cloud
+             if(window.saveMutualToCloud) window.saveMutualToCloud(window.mutualData);
+        }
+
+        window.openMutualModal = () => {
+            window.renderMutualList(); // Render what we have in memory from Firestore
+            mutualSettingsEl.classList.add('hidden');
+            mutualListEl.classList.remove('hidden');
+            mutualQuickHelperEl.classList.remove('hidden');
+            mutualModalEl.classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        window.closeMutualModal = () => mutualModalEl.classList.add('hidden');
+
+        window.toggleMutualSettings = () => {
+            if (mutualSettingsEl.classList.contains('hidden')) {
+                // Show Settings
+                mutualSettingsEl.classList.remove('hidden');
+                mutualListEl.classList.add('hidden');
+                mutualQuickHelperEl.classList.add('hidden');
+                mutualNamesInput.value = (window.mutualData.names || []).join('\n');
+                mutualTargetInput.value = window.mutualData.target || 3;
+                document.getElementById('target-display').textContent = window.mutualData.target || 3;
+            } else {
+                // Show List
+                mutualSettingsEl.classList.add('hidden');
+                mutualListEl.classList.remove('hidden');
+                mutualQuickHelperEl.classList.remove('hidden');
+            }
+        }
+
+        window.saveMutualConfig = () => {
+            const raw = mutualNamesInput.value;
+            const newNames = raw.split('\n').map(s => s.trim()).filter(s => s);
+            const newTarget = parseInt(mutualTargetInput.value) || 3;
+            
+            if (newNames.length === 0) return alert('請至少輸入一個名字');
+
+            const currentUsers = window.mutualData.users || {};
+            const newUsers = {};
+            newNames.forEach(n => {
+                if (currentUsers[n]) {
+                    newUsers[n] = currentUsers[n];
+                } else {
+                    newUsers[n] = { url: '', history: [], todayHelper: null };
+                }
+            });
+
+            window.mutualData.names = newNames;
+            window.mutualData.users = newUsers;
+            window.mutualData.target = newTarget;
+            
+            saveMutual();
+            toggleMutualSettings();
+            renderMutualList();
+        }
+
+        window.updateMutualUrl = (name, url) => {
+            if (!window.mutualData.users[name]) window.mutualData.users[name] = { url: '', history: [], todayHelper: null };
+            window.mutualData.users[name].url = url.trim();
+            saveMutual(); // Sync to cloud
+        }
+
+        window.toggleHistory = (targetName, helperName) => {
+            const user = window.mutualData.users[targetName];
+            if (!user) return;
+
+            const idx = user.history.indexOf(helperName);
+            if (idx > -1) {
+                user.history.splice(idx, 1);
+                if (user.todayHelper === helperName) user.todayHelper = null;
+            } else {
+                user.history.push(helperName);
+                user.todayHelper = helperName;
+            }
+            saveMutual(); // Sync
+            renderMutualList();
+        }
+
+        window.markAllAsHelpedBy = (helperName) => {
+            if(!confirm(`確定今天由「${helperName}」幫大家簽到嗎？`)) return;
+
+            (window.mutualData.names || []).forEach(targetName => {
+                if (targetName !== helperName) {
+                    const user = window.mutualData.users[targetName];
+                    if(user) {
+                        if (!user.history.includes(helperName)) user.history.push(helperName);
+                        user.todayHelper = helperName;
+                    }
+                }
+            });
+            saveMutual();
+            renderMutualList();
+        }
+
+        window.showResetMenu = () => {
+            resetMenuModalEl.classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        window.closeResetMenu = () => {
+            resetMenuModalEl.classList.add('hidden');
+        }
+
+        window.resetRound = () => {
+             (window.mutualData.names || []).forEach(n => {
+                if(window.mutualData.users[n]) {
+                    window.mutualData.users[n].todayHelper = null;
+                    window.mutualData.users[n].history = [];
+                }
+            });
+            saveMutual();
+            renderMutualList();
+            closeResetMenu();
+        }
+
+        window.pasteToMutual = async (inputId, name) => {
+            try {
+                const text = await navigator.clipboard.readText();
+                const input = document.getElementById(inputId);
+                input.value = text;
+                updateMutualUrl(name, text);
+            } catch (err) {
+                 alert('請手動貼上');
+            }
+        }
+
+        window.renderMutualList = () => {
+            const data = window.mutualData;
+            const names = data.names || [];
+            
+            // Render Header Buttons
+            mutualHelperButtonsEl.innerHTML = names.map(name => {
+                return `<button onclick="markAllAsHelpedBy('${name}')" class="px-3 py-1 bg-dark-card border border-dark-border rounded text-xs font-bold hover:bg-blue-600 hover:text-white transition-colors">${name}</button>`;
+            }).join('');
+
+            // Render Cards
+            mutualListEl.innerHTML = names.map(name => {
+                const userData = (data.users && data.users[name]) ? data.users[name] : { url: '', history: [], todayHelper: null };
+                const historyCount = userData.history ? userData.history.length : 0;
+                const target = data.target || 3;
+                const isRoundComplete = historyCount >= target;
+                const isTodayDone = !!userData.todayHelper;
+
+                let cardBorder = 'border-dark-border bg-dark-card';
+                let cardStatusBadge = '';
+                
+                if (isRoundComplete) {
+                    cardBorder = 'border-amber-500/50 bg-amber-900/10 shadow-[0_0_15px_rgba(245,158,11,0.1)]';
+                    cardStatusBadge = `<span class="ml-2 text-[10px] font-bold text-amber-900 bg-amber-400 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm"><i data-lucide="crown" class="w-3 h-3"></i> 本輪完成</span>`;
+                }
+                
+                let todayStatusHtml = '';
+                if (isTodayDone) {
+                     todayStatusHtml = `<span class="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> 今日已簽 (${userData.todayHelper})</span>`;
+                } else {
+                     todayStatusHtml = `<span class="text-xs font-bold text-dark-subtext bg-white/5 px-2 py-0.5 rounded">今日未簽</span>`;
+                }
+
+                const helperButtons = names
+                    .filter(n => n !== name)
+                    .map(helper => {
+                        const inHistory = userData.history && userData.history.includes(helper);
+                        const btnClass = inHistory 
+                            ? 'bg-emerald-600 text-white shadow shadow-emerald-900/50 border-emerald-500' 
+                            : 'bg-dark-input text-dark-subtext border-dark-border hover:bg-white/5 hover:text-white';
+                        
+                        return `
+                            <button onclick="toggleHistory('${name}', '${helper}')" 
+                                class="${btnClass} border px-3 py-1.5 rounded text-xs font-bold transition-all active:scale-95 flex-1 min-w-[3rem]">
+                                ${helper}
+                            </button>
+                        `;
+                    }).join('');
+
+                return `
+                <div class="${cardBorder} border rounded-xl p-4 transition-all relative overflow-hidden">
+                    ${isRoundComplete ? '<div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-amber-400/20 to-transparent rounded-bl-3xl -mr-4 -mt-4"></div>' : ''}
+                    
+                    <div class="flex justify-between items-start mb-3 relative z-10">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <h4 class="font-bold text-white text-lg">${name}</h4>
+                                ${cardStatusBadge}
+                            </div>
+                            <div class="flex items-center gap-2">
+                                ${todayStatusHtml}
+                                <span class="text-[10px] font-mono text-dark-subtext bg-dark-bg px-1.5 rounded border border-white/5">
+                                    累計: <span class="${isRoundComplete ? 'text-amber-400' : 'text-white'}">${historyCount}</span>/${target}
+                                </span>
+                            </div>
+                        </div>
+                        <button onclick="if(window.mutualData.users['${name}'].url) openUrl(window.mutualData.users['${name}'].url)" 
+                            class="${userData.url ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-dark-input text-dark-subtext cursor-not-allowed'} px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">
+                            前往 <i data-lucide="external-link" class="w-3 h-3"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex gap-2 mb-4 relative z-10">
+                        <div class="relative flex-1">
+                            <input type="text" 
+                                value="${userData.url || ''}" 
+                                oninput="updateMutualUrl('${name}', this.value)"
+                                id="mutual-input-${name}"
+                                class="w-full bg-dark-input border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors" 
+                                placeholder="貼上 ${name} 的連結...">
+                        </div>
+                        <button onclick="pasteToMutual('mutual-input-${name}', '${name}')" class="bg-dark-input border border-dark-border px-3 rounded-lg text-dark-subtext hover:text-white hover:bg-white/5 transition-colors">
+                            <i data-lucide="clipboard-paste" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <div class="border-t border-white/5 pt-3 relative z-10">
+                        <p class="text-[10px] text-dark-subtext font-bold uppercase mb-2 flex justify-between">
+                            <span>歷史紀錄 (點擊切換)</span>
+                            <span class="text-white/30">${(userData.history || []).join(', ')}</span>
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            ${helperButtons}
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        // =======================
+        // TIMER LOGIC (CLOUD)
+        // =======================
+        const tContainer = document.getElementById('timers-container');
+        const tEmpty = document.getElementById('timer-empty');
+        
+        window.updateTimerLoop = () => {
+            const now = new Date();
+            headerTime.textContent = formatTimeWithSeconds(now);
+            headerDate.textContent = getTaipeiDate();
+
+            const sec = now.getSeconds();
+            const secRatio = (sec / 60) * 100;
+            document.getElementById('seconds-bar').style.width = `${secRatio}%`;
+            document.getElementById('seconds-text').textContent = pad(sec);
+            
+            // Check tasks (from memory, updated via Firestore listener)
+            checkScheduledTasks(now);
+
+            // Process Timers (from memory)
+            const timers = window.getTimerData();
+            timers.forEach(t => {
+                // Ensure endTime is valid Date
+                if(!(t.endTime instanceof Date)) t.endTime = new Date(t.endTime);
+                
+                const diff = t.endTime - now;
+                t.remaining = Math.max(0, Math.ceil(diff / 1000));
+                t.isFinished = t.remaining <= 0;
+            });
+
+            const active = timers.filter(t => !t.isFinished).length;
+            document.getElementById('active-count').textContent = active;
+            const tBar = document.getElementById('tasks-bar');
+            tBar.style.width = active > 0 ? '100%' : '0%';
+
+            renderTimers();
+        }
+
+        function renderTimers() {
+            const timers = window.getTimerData();
+            if (timers.length === 0) {
+                tContainer.innerHTML = '';
+                tEmpty.classList.remove('hidden');
+                return;
+            }
+            tEmpty.classList.add('hidden');
+            
+            tContainer.innerHTML = timers.map(t => {
+                const total = t.totalSeconds || 60; // fallback
+                const percent = Math.max(0, (t.remaining / total) * 100);
+                const isDone = t.isFinished;
+                const statusClass = isDone ? 'bg-red-500/10 border-red-500/30' : 'bg-dark-card border-dark-border';
+                const progressColor = isDone ? 'bg-red-500' : 'bg-blue-500';
+
+                const fmtDuration = (sec) => {
+                    const h = Math.floor(sec / 3600);
+                    const m = Math.floor((sec % 3600) / 60);
+                    const s = sec % 60;
+                    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+                };
+
+                return `
+                <div class="relative ${statusClass} border rounded-xl p-4 overflow-hidden transition-all group hover:border-slate-500 pr-12">
+                    <div class="absolute bottom-0 left-0 h-1 ${progressColor} transition-all duration-1000 opacity-60" style="width: ${percent}%"></div>
+                    
+                    <div class="flex justify-between items-center relative z-10">
+                        <div class="flex items-center gap-4 overflow-hidden flex-1">
+                            <div class="w-12 h-12 flex-shrink-0 rounded-xl ${isDone ? 'bg-red-500/20' : 'bg-blue-500/10'} flex items-center justify-center border border-white/5">
+                                ${isDone ? '<i data-lucide="bell" class="w-6 h-6 text-red-500 animate-bounce"></i>' : '<i data-lucide="timer" class="w-6 h-6 text-blue-400"></i>'}
+                            </div>
+                            <div class="min-w-0 flex flex-col justify-center">
+                                <div class="font-medium text-xs text-dark-subtext truncate mb-1 uppercase tracking-wide flex items-center gap-1">
+                                    ${t.label}
+                                    ${t.hasDelay ? '<span class="text-[9px] text-amber-400 bg-amber-400/10 px-1 rounded border border-amber-400/20">BUFFER</span>' : ''}
+                                </div>
+                                <div class="font-mono font-bold ${isDone ? 'text-red-400' : 'text-white'} text-2xl sm:text-3xl leading-none tracking-tight">
+                                    ${isDone ? 'TIME UP' : fmtDuration(t.remaining)}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center gap-3">
+                            <div class="flex flex-col items-end justify-center pl-4 border-l border-white/10">
+                                <span class="text-[10px] font-bold text-dark-subtext uppercase tracking-wider mb-1">Ends At</span>
+                                <span class="font-mono font-bold text-emerald-400 text-2xl sm:text-3xl leading-none">
+                                    ${formatTime(t.endTime)}
+                                </span>
+                            </div>
+                            
+                            <button onclick="deleteTimerFromCloud('${t.id}')" class="w-8 h-8 flex items-center justify-center border border-red-500/40 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all ml-1 shrink-0" title="Remove">
+                                <i data-lucide="x" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        document.getElementById('timer-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const label = document.getElementById('t-label').value.trim() || 'Task';
+            const h = parseInt(inputH.value) || 0;
+            const m = parseInt(inputM.value) || 0;
+            const s = parseInt(inputS.value) || 0;
+            const delayMin = parseInt(globalDelayInput.value) || 0;
+            
+            const inputSeconds = h * 3600 + m * 60 + s;
+            const total = inputSeconds + (delayMin * 60);
+            
+            if (total <= 0) return;
+
+            const endTime = new Date(new Date().getTime() + total * 1000);
+            
+            window.saveTimerToCloud({
+                label,
+                endTime: endTime,
+                totalSeconds: total,
+                hasDelay: delayMin > 0
+            });
+            
+            // Clear inputs
+            document.getElementById('t-label').value = '';
+            inputH.value = '';
+            inputM.value = '';
+            inputS.value = '';
+            inputH.focus();
+        });
+
+        // =======================
+        // TRACKER LOGIC (CLOUD)
+        // =======================
+        let editingId = null;
+        let selectedTrackerIds = new Set(); 
+
+        const listEl = document.getElementById('tracker-list');
+        const modalEl = document.getElementById('tracker-modal');
+
+        function checkScheduledTasks(now) {
+            const currentHHMM = pad(now.getHours()) + ':' + pad(now.getMinutes());
+            const data = window.getTrackerData();
+
+            data.forEach(link => {
+                if (link.schedule && link.url && link.schedule === currentHHMM && !link.executed) {
+                    console.log(`Auto-opening ${link.name} at ${currentHHMM}`);
+                    
+                    // Optimistic update in cloud
+                    window.updateTaskInCloud(link.id, {
+                        executed: true,
+                        clicks: (link.clicks || 0) + 1
+                    });
+
+                    try {
+                        const win = window.open(link.url.startsWith('http') ? link.url : 'https://' + link.url, '_blank');
+                        if (!win || win.closed || typeof win.closed == 'undefined') {
+                            showPopupWarning();
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        showPopupWarning();
+                    }
+                }
+            });
+        }
+        
+        function showPopupWarning() {
+            popupWarning.classList.remove('hidden');
+            popupWarningIcon.classList.remove('hidden');
+        }
+
+        window.toggleTrackerSelection = (id) => {
+            if (selectedTrackerIds.has(id)) {
+                selectedTrackerIds.delete(id);
+            } else {
+                selectedTrackerIds.add(id);
+            }
+            renderTracker(); // Just re-render UI
+        };
+
+        window.toggleSelectAll = () => {
+            const data = window.getTrackerData();
+            const allIds = data.map(l => l.id);
+            const allSelected = allIds.length > 0 && allIds.every(id => selectedTrackerIds.has(id));
+            
+            if (allSelected) {
+                selectedTrackerIds.clear();
+            } else {
+                allIds.forEach(id => selectedTrackerIds.add(id));
+            }
+            renderTracker();
+        };
+
+        window.deleteSelectedTasks = () => {
+            if (selectedTrackerIds.size === 0) return;
+            
+            if (confirm(`確定刪除選取的 ${selectedTrackerIds.size} 筆任務？`)) {
+                selectedTrackerIds.forEach(id => {
+                    window.deleteTaskFromCloud(id);
+                });
+                selectedTrackerIds.clear();
+            }
+        };
+
+        window.quickPaste = async (idx) => {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (!text) return alert('剪貼簿是空的');
+                
+                const data = window.getTrackerData();
+                const link = data[idx];
+                const oldUrl = link.url;
+                
+                const rawUrl = text.trim();
+                const urlMatch = rawUrl.match(/(https?:\/\/[^\s]+)/);
+                const cleanUrl = urlMatch ? urlMatch[0] : rawUrl;
+                
+                if (cleanUrl === oldUrl) return alert('網址未變更');
+                
+                window.updateTaskInCloud(link.id, { url: cleanUrl });
+                alert(`已將 "${link.name}" 的網址更新為:\n${cleanUrl}`);
+                
+            } catch (err) {
+                const manual = prompt('無法自動讀取剪貼簿，請手動貼上網址:', '');
+                if (manual) {
+                    const data = window.getTrackerData();
+                    window.updateTaskInCloud(data[idx].id, { url: manual.trim() });
+                }
+            }
+        };
+
+        window.renderTracker = () => {
+            const data = window.getTrackerData();
+            const empty = document.getElementById('tracker-empty');
+            
+            if(data.length === 0) {
+                listEl.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+
+            const allIds = data.map(l => l.id);
+            const allSelected = allIds.length > 0 && allIds.every(id => selectedTrackerIds.has(id));
+            const hasSelection = selectedTrackerIds.size > 0;
+
+            // Update UI buttons based on selection
+            const btnSelectAll = document.getElementById('btn-select-all');
+            if (btnSelectAll) {
+                 if (allSelected) {
+                    btnSelectAll.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+                    btnSelectAll.classList.remove('bg-dark-card', 'text-dark-subtext', 'border-dark-border');
+                 } else {
+                    btnSelectAll.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
+                    btnSelectAll.classList.add('bg-dark-card', 'text-dark-subtext', 'border-dark-border');
+                 }
+            }
+            const btnDelete = document.getElementById('btn-delete-selected');
+            if (btnDelete) {
+                if (hasSelection) btnDelete.classList.remove('hidden');
+                else btnDelete.classList.add('hidden');
+            }
+
+            listEl.innerHTML = data.map((link, idx) => {
+                const count = link.clicks || 0;
+                const isSelected = selectedTrackerIds.has(link.id); 
+                let dotsHtml = '';
+                if(count > 0 && count <= 5) {
+                    dotsHtml = Array(count).fill(`<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>`).join('');
+                } else if (count > 5) {
+                    dotsHtml = `<span class="text-xs font-mono font-bold text-emerald-400">${count} runs</span>`;
+                } else {
+                    dotsHtml = `<span class="text-[10px] text-dark-subtext uppercase font-bold opacity-50">Ready</span>`;
+                }
+
+                let scheduleHtml = '';
+                if (link.schedule) {
+                    const statusColor = link.executed ? 'text-dark-subtext opacity-50 line-through' : 'text-amber-400';
+                    const iconColor = link.executed ? 'text-dark-subtext' : 'text-amber-400';
+                    scheduleHtml = `
+                        <div class="flex items-center gap-1.5 bg-dark-bg/50 px-2 py-1 rounded border border-white/5 ml-auto md:ml-0 md:mr-2">
+                            <i data-lucide="clock" class="w-3 h-3 ${iconColor}"></i>
+                            <span class="text-[10px] font-mono font-bold ${statusColor}">${link.schedule}</span>
+                        </div>
+                    `;
+                }
+
+                return `
+                <div class="group relative bg-dark-card border border-dark-border hover:border-slate-500 rounded-xl p-3 flex items-center gap-3 transition-all select-none shadow-sm">
+                    <div class="flex items-center justify-center pl-1 pr-2">
+                        <input type="checkbox" class="custom-checkbox" 
+                            onchange="toggleTrackerSelection('${link.id}')" 
+                            ${isSelected ? 'checked' : ''}>
+                    </div>
+
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between mb-0.5">
+                            <h3 class="font-medium text-sm text-white truncate pr-2">${link.name}</h3>
+                            ${scheduleHtml}
+                        </div>
+                        <div class="flex items-center gap-2 h-4">
+                            ${dotsHtml}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="visitLink(${idx})" class="bg-blue-600/10 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 flex items-center gap-1">
+                            GO <i data-lucide="external-link" class="w-3 h-3"></i>
+                        </button>
+                        <div class="flex flex-col gap-1 border-l border-white/5 pl-2">
+                            <button onclick="quickPaste(${idx})" class="text-dark-subtext/60 hover:text-emerald-400 p-1" title="快速貼上網址 (覆蓋)"><i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="editTracker(${idx})" class="text-dark-subtext/60 hover:text-white p-1"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="deleteTracker(${idx})" class="text-dark-subtext/60 hover:text-red-400 p-1"><i data-lucide="trash" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        window.visitLink = (idx) => {
+            const data = window.getTrackerData();
+            const link = data[idx];
+            // Update Cloud
+            window.updateTaskInCloud(link.id, {
+                clicks: (link.clicks || 0) + 1
+            });
+            if(link.url) openUrl(link.url);
+        };
+        
+        function openUrl(url) {
+            let targetUrl = url;
+            if (!/^https?:\/\//i.test(targetUrl)) {
+                targetUrl = 'https://' + targetUrl;
+            }
+            const win = window.open(targetUrl, '_blank');
+            if (!win || win.closed || typeof win.closed == 'undefined') {
+                showPopupWarning();
+            }
+        }
+
+        window.openTrackerModal = () => {
+            editingId = null;
+            document.getElementById('modal-title').innerHTML = `<i data-lucide="plus" class="w-5 h-5 text-emerald-400"></i><span>New Task</span>`;
+            document.getElementById('modal-name').value = '';
+            document.getElementById('modal-url').value = '';
+            document.getElementById('modal-schedule').value = ''; 
+            modalEl.classList.remove('hidden');
+            lucide.createIcons();
+        };
+
+        window.editTracker = (idx) => {
+            const data = window.getTrackerData();
+            const item = data[idx];
+            editingId = item.id; // Store Doc ID
+            document.getElementById('modal-title').innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>Edit Task</span>`;
+            document.getElementById('modal-name').value = item.name;
+            document.getElementById('modal-url').value = item.url || '';
+            document.getElementById('modal-schedule').value = item.schedule || ''; 
+            modalEl.classList.remove('hidden');
+            lucide.createIcons();
+        };
+
+        window.closeTrackerModal = () => modalEl.classList.add('hidden');
+
+        window.saveTrackerTask = () => {
+            const name = document.getElementById('modal-name').value.trim();
+            const rawUrl = document.getElementById('modal-url').value.trim();
+            const schedule = document.getElementById('modal-schedule').value; 
+            
+            if(!name) return;
+            const urlMatch = rawUrl.match(/(https?:\/\/[^\s]+)/);
+            const cleanUrl = urlMatch ? urlMatch[0] : rawUrl;
+
+            const taskData = {
+                name,
+                url: cleanUrl,
+                schedule: schedule || null, 
+            };
+
+            if(editingId !== null) {
+                // Update Cloud
+                window.updateTaskInCloud(editingId, {
+                    ...taskData,
+                    // Only reset executed if schedule changed? simplified for now
+                    executed: false 
+                });
+            } else {
+                // Add Cloud - 直接新增，不再檢查名稱是否重複
+                window.saveTaskToCloud(taskData);
+            }
+            closeTrackerModal();
+        };
+
+        window.deleteTracker = (idx) => {
+            const data = window.getTrackerData();
+            if(confirm('Delete this routine?')) {
+                window.deleteTaskFromCloud(data[idx].id);
+                selectedTrackerIds.delete(data[idx].id);
+            }
+        };
+
+        // --- SHORTCUT INTENT LOGIC ---
+        function checkIncomingShare() {
+            const params = new URLSearchParams(window.location.search);
+            const sharedUrl = params.get('share_url');
+            const sharedTitle = params.get('share_title');
+
+            if (sharedUrl) {
+                // IMPORTANT: In Cloud mode, we just auto-save to cloud!
+                // Or we can pop up the modal. Let's pop up modal to confirm title.
+                window.history.replaceState({}, document.title, window.location.pathname);
+                openTrackerModal();
+                document.getElementById('modal-url').value = sharedUrl;
+                document.getElementById('modal-name').value = sharedTitle || 'Shared Link';
+                document.getElementById('modal-name').focus();
+            }
+        }
+        
+        // Loop for timers
+        setInterval(updateTimerLoop, 1000);
+        
     </script>
 </body>
 </html>
