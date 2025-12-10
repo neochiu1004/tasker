@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V5</title>
+    <title>Command Center V5 - Fixed</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -13,7 +13,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- 1. CONFIGURATION ---
         const firebaseConfig = {
@@ -40,35 +40,33 @@
         let currentWorkspaceId = localStorage.getItem('cmd_workspace_id') || '';
         let trackerData = [];
         let timerData = [];
-        window.mutualData = { target: 3, names: [], users: {} }; // Init empty
+        window.mutualData = { target: 3, names: [], users: {} }; 
+        let isMutualLoaded = false;
+        let editingId = null; 
+        let selectedTrackerIds = new Set();
 
-        // --- 3. IMMEDIATE URL CAPTURE (Fix for "Invalid") ---
-        // Capture params immediately before anything else runs
+        // --- 3. AUTO-LOGIN CHECK ---
         const urlParams = new URLSearchParams(window.location.search);
         const urlSpaceId = urlParams.get('space_id');
         const shareUrl = urlParams.get('share_url');
         const shareTitle = urlParams.get('share_title');
         
-        // Handle Auto Login Param
         if (urlSpaceId) {
             currentWorkspaceId = urlSpaceId;
             localStorage.setItem('cmd_workspace_id', urlSpaceId);
         }
 
-        // Store Share Data globally to process after auth
+        // Store Share Data
         let pendingShare = null;
         if (shareUrl) {
             pendingShare = {
                 url: shareUrl,
                 title: shareTitle || 'Shared Link'
             };
-            // Clear URL immediately to look clean
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        // --- 4. CORE FUNCTIONS (Hoisted) ---
-
-        // Extract URL Logic (Global Helper)
+        // --- 4. HELPER FUNCTIONS ---
         function extractUrl(text) { 
             if(!text) return '';
             const m = text.match(/(https?:\/\/[^\s]+)/); 
@@ -76,104 +74,10 @@
         }
         window.extractUrl = extractUrl;
 
-        // Auth
-        async function initAuth() { 
-            try { await signInAnonymously(auth); } 
-            catch (e) { alert("連線錯誤: " + e.message); } 
-        }
-
-        function handleLogin(e) {
-            e.preventDefault();
-            const inputId = document.getElementById('workspace-input').value.trim();
-            if (!inputId) return alert("請輸入空間代碼");
-            currentWorkspaceId = inputId;
-            localStorage.setItem('cmd_workspace_id', inputId);
-            switchLoginState(true);
-            initFirestoreListeners();
-        }
-        window.handleLogin = handleLogin;
-
-        function handleLogout() {
-            if(confirm('確定要登出嗎？')) {
-                localStorage.removeItem('cmd_workspace_id');
-                window.location.reload();
-            }
-        }
-        window.handleLogout = handleLogout;
-
-        function switchLoginState(isLoggedIn) {
-            if (isLoggedIn) {
-                document.getElementById('login-screen').classList.add('hidden');
-                document.getElementById('main-app').classList.remove('hidden');
-            } else {
-                document.getElementById('login-screen').classList.remove('hidden');
-                document.getElementById('main-app').classList.add('hidden');
-            }
-        }
-
-        // Firestore Setup
-        function getCollections() {
-            if (!currentWorkspaceId) return null;
-            return {
-                tasks: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_tasks`),
-                timers: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_timers`),
-                mutualDoc: doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_mutual`, 'config')
-            };
-        }
-
-        function initFirestoreListeners() {
-            const cols = getCollections();
-            if (!cols) return;
-
-            // Tasks Listener
-            onSnapshot(query(cols.tasks, orderBy('createdAt', 'desc')), (snapshot) => {
-                trackerData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderTracker();
-            });
-
-            // Timers Listener
-            onSnapshot(cols.timers, (snapshot) => {
-                timerData = snapshot.docs.map(d => ({ id: d.id, ...d.data(), endTime: d.data().endTime ? d.data().endTime.toDate() : new Date() }));
-                // updateTimerLoop called by interval
-            });
-
-            // Mutual Listener
-            onSnapshot(cols.mutualDoc, (docSnap) => {
-                if (docSnap.exists()) {
-                    window.mutualData = docSnap.data();
-                    renderMutualList();
-                }
-                // Try to process pending share now that we have names (if any)
-                processPendingShare(); 
-            });
-            
-            document.getElementById('workspace-id-display').textContent = currentWorkspaceId;
-        }
-
-        // --- THE AUTO SAVE LOGIC ---
-        function processPendingShare() {
-            if (!pendingShare || !currentUser) return; // Not ready or no data
-
-            const cleanUrl = extractUrl(pendingShare.url);
-            const name = pendingShare.title.trim();
-            const mutualNames = window.mutualData.names || [];
-            
-            // Check routing (Case insensitive)
-            const matchName = mutualNames.find(n => n.toLowerCase() === name.toLowerCase());
-
-            if (matchName) {
-                // Route to Mutual
-                updateMutualUrl(matchName, cleanUrl);
-                showToast(`已更新互助: ${matchName}`, 'success');
-            } else {
-                // Route to General Tasks
-                saveTaskToCloud({ name: name, url: cleanUrl, schedule: null });
-                showToast(`已自動存入清單: ${name}`, 'success');
-            }
-
-            // Clear it so it doesn't run again
-            pendingShare = null;
-        }
+        function pad(n) { return String(n).padStart(2, '0'); }
+        function formatTime(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+        function formatTimeWithSeconds(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+        function getTaipeiDate() { return new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 
         function showToast(msg, type='info') {
             const t = document.createElement('div');
@@ -185,7 +89,14 @@
             setTimeout(()=>t.remove(), 4000);
         }
 
-        // --- CRUD Operations ---
+        function openUrl(url) { 
+            if(!url) return; 
+            const win = window.open(url.startsWith('http')?url:'https://'+url, '_blank'); 
+            if(!win) alert('Pop-up Blocked'); 
+        }
+        window.openUrl = openUrl;
+
+        // --- 5. DATA OPERATIONS ---
         async function saveTaskToCloud(task) {
             const cols = getCollections();
             if(cols) await addDoc(cols.tasks, { ...task, createdAt: Date.now(), executed: false, clicks: 0 });
@@ -222,296 +133,103 @@
         }
         window.saveMutualToCloud = saveMutualToCloud;
 
-        // Data Accessors
-        window.getTrackerData = () => trackerData;
-        window.getTimerData = () => timerData;
-
-        // --- 5. AUTH LISTENER ---
-        onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            if (user && currentWorkspaceId) {
-                switchLoginState(true);
-                initFirestoreListeners();
-                
-                // Fallback: If mutual data is empty/slow, try to save anyway after 1s
-                setTimeout(() => {
-                    if (pendingShare) {
-                        console.log("Mutual slow, forcing save to general...");
-                        // If logic hasn't run, force save to general
-                        saveTaskToCloud({ name: pendingShare.title, url: extractUrl(pendingShare.url), schedule: null });
-                        showToast(`已強制存入: ${pendingShare.title}`, 'info');
-                        pendingShare = null;
-                    }
-                }, 1500); // 1.5s timeout
-                
-            } else if (user) {
-                switchLoginState(false);
-            }
-        });
-
-        // Start
-        initAuth();
-    </script>
-
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; user-select: none; touch-action: manipulation; }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
-        .custom-checkbox { appearance: none; background-color: #334155; margin: 0; font: inherit; color: currentColor; width: 1.15em; height: 1.15em; border: 1px solid #475569; border-radius: 0.25em; display: grid; place-content: center; cursor: pointer; transition: all 0.2s; }
-        .custom-checkbox::before { content: ""; width: 0.65em; height: 0.65em; transform: scale(0); transition: 120ms transform ease-in-out; box-shadow: inset 1em 1em white; transform-origin: center; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); }
-        .custom-checkbox:checked { background-color: #2563eb; border-color: #2563eb; }
-        .custom-checkbox:checked::before { transform: scale(1); }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #1e293b; } ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-        .view-section { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .input-focus-ring:focus-within { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); }
-    </style>
-    <script>
-        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { dark: { bg: '#0f172a', card: '#1e293b', input: '#334155', border: '#334155', text: '#f8fafc', subtext: '#94a3b8', } } } } }
-    </script>
-</head>
-<body class="min-h-screen flex flex-col items-center">
-
-    <!-- LOGIN SCREEN -->
-    <div id="login-screen" class="fixed inset-0 z-50 bg-[#0f172a] flex items-center justify-center p-6 hidden">
-        <div class="w-full max-w-sm bg-dark-card border border-dark-border rounded-2xl p-8 shadow-2xl">
-            <div class="text-center mb-8">
-                <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-900/50">
-                    <i data-lucide="command" class="w-8 h-8 text-white"></i>
-                </div>
-                <h1 class="text-2xl font-bold text-white mb-2">Command Center</h1>
-                <p class="text-dark-subtext text-sm">請輸入您的空間代碼以同步資料</p>
-            </div>
-            <form onsubmit="handleLogin(event)" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-dark-subtext uppercase mb-2">Space ID</label>
-                    <input type="text" id="workspace-input" placeholder="例如: 1069" 
-                        class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none transition-colors text-center font-mono font-bold">
-                </div>
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
-                    進入系統 <i data-lucide="arrow-right" class="w-4 h-4"></i>
-                </button>
-            </form>
-        </div>
-    </div>
-
-    <!-- MAIN APP -->
-    <div id="main-app" class="w-full max-w-lg mx-auto space-y-6 p-4 md:p-8 pb-24 hidden">
-        
-        <!-- Header -->
-        <header class="flex flex-col gap-3 bg-dark-card border border-dark-border p-3 rounded-xl shadow-lg relative overflow-hidden">
-            <!-- ID Badge -->
-            <button onclick="handleLogout()" class="absolute top-2 right-2 px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext hover:text-white hover:bg-red-900/30 transition-colors flex items-center gap-1 group" title="登出">
-                <span class="font-mono" id="workspace-id-display">...</span>
-                <i data-lucide="log-out" class="w-3 h-3 group-hover:text-red-400"></i>
-            </button>
-
-            <div class="flex justify-between items-center mt-1">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-900/50">
-                        <i data-lucide="command" class="w-5 h-5"></i>
-                    </div>
-                    <div>
-                        <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">COMMAND CTR</h1>
-                        <div class="flex items-center gap-2 text-[10px] text-dark-subtext font-mono">
-                            <span id="header-time-text" class="text-emerald-400 font-bold">--:--:--</span>
-                            <span>•</span>
-                            <span id="date-text">--/--</span>
-                        </div>
-                    </div>
-                </div>
-                <div id="popup-warning-icon" class="hidden text-amber-500 animate-pulse mr-12" title="Popups blocked"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
-            </div>
-
-            <!-- Button Switcher -->
-            <div class="flex bg-dark-bg p-1 rounded-lg border border-dark-border overflow-x-auto no-scrollbar">
-                <button id="btn-view-tracker" onclick="switchView('tracker')" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0"><i data-lucide="list-todo" class="w-3 h-3"></i> TASKS</button>
-                <button id="btn-view-timer" onclick="switchView('timer')" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0"><i data-lucide="timer" class="w-3 h-3"></i> TIMER</button>
-                <button onclick="openMutualModal()" class="ml-auto px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center gap-1 shrink-0"><i data-lucide="users" class="w-3 h-3"></i> 互助</button>
-            </div>
-        </header>
-
-        <!-- ==================== TRACKER VIEW ==================== -->
-        <div id="view-tracker" class="view-section space-y-6">
-            <div class="flex justify-between items-end">
-                <h2 class="text-sm font-bold text-dark-subtext tracking-wider uppercase whitespace-nowrap mr-2">Cloud Routine</h2>
-                <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar justify-end w-full">
-                    <button onclick="toggleSelectAll()" id="btn-select-all" class="text-xs bg-dark-card border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0"><i data-lucide="check-square" class="w-3 h-3"></i> ALL</button>
-                    <button onclick="deleteSelectedTasks()" id="btn-delete-selected" class="hidden text-xs bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-500 px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0"><i data-lucide="trash-2" class="w-3 h-3"></i> DEL</button>
-                </div>
-            </div>
-            <div id="tracker-list" class="space-y-3 pb-8"></div>
-            <div id="tracker-empty" class="hidden py-12 text-center opacity-40 select-none">
-                <i data-lucide="cloud" class="w-12 h-12 mx-auto mb-3 text-dark-subtext opacity-50 block"></i>
-                <p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">Waiting for Data...</p>
-            </div>
-        </div>
-
-        <!-- ==================== TIMER VIEW ==================== -->
-        <div id="view-timer" class="view-section hidden space-y-5">
-            <div class="grid grid-cols-2 gap-4 text-xs font-mono">
-                <div><div class="flex justify-between mb-1 text-dark-subtext"><span>SYSTEM TIME</span><span id="seconds-text" class="text-blue-400">00</span></div><div class="h-1.5 w-full bg-dark-border rounded-full overflow-hidden"><div id="seconds-bar" class="h-full bg-blue-500/80 w-0 transition-all duration-1000"></div></div></div>
-                <div><div class="flex justify-between mb-1 text-dark-subtext"><span>ACTIVE TASKS</span><span id="active-count" class="text-white">0</span></div><div class="h-1.5 w-full bg-dark-border rounded-full overflow-hidden"><div id="tasks-bar" class="h-full bg-emerald-500/80 w-0 transition-all duration-500"></div></div></div>
-            </div>
-            <div class="bg-dark-card border border-dark-border rounded-lg p-3 flex justify-between items-center shadow-sm">
-                <div class="flex items-center gap-2 text-amber-400"><i data-lucide="hourglass" class="w-4 h-4"></i><span class="text-xs font-bold uppercase tracking-wider text-dark-subtext">Delay Buffer</span></div>
-                <div class="flex items-center bg-dark-bg border border-dark-border rounded px-2 py-1 gap-2 focus-within:border-amber-400 transition-colors"><input type="number" id="global-delay" value="0" min="0" inputmode="numeric" class="bg-transparent text-right font-mono text-sm font-bold text-white w-12 outline-none" placeholder="0"><span class="text-[10px] font-bold text-dark-subtext">MIN</span></div>
-            </div>
-            <form id="timer-form" class="space-y-3">
-                <div class="relative group"><div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i data-lucide="plus" class="h-4 w-4 text-dark-subtext group-focus-within:text-blue-400"></i></div><input type="text" id="t-label" placeholder="New timer name..." autocomplete="off" class="block w-full pl-10 pr-4 py-3 bg-dark-card border border-dark-border rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white transition-all shadow-sm"></div>
-                <div class="grid grid-cols-4 gap-2">
-                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors"><label class="text-[9px] text-dark-subtext font-bold block mb-1">HR</label><input type="number" id="t-h" placeholder="0" min="0" inputmode="numeric" class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700"></div>
-                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors"><label class="text-[9px] text-dark-subtext font-bold block mb-1">MIN</label><input type="number" id="t-m" placeholder="0" min="0" max="59" inputmode="numeric" class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700"></div>
-                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors"><label class="text-[9px] text-dark-subtext font-bold block mb-1">SEC</label><input type="number" id="t-s" placeholder="0" min="0" max="59" inputmode="numeric" class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700"></div>
-                    <button type="submit" id="t-submit" class="bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center transition-all shadow-lg shadow-blue-900/30 active:scale-95"><i data-lucide="play" class="w-6 h-6 fill-current"></i></button>
-                </div>
-            </form>
-            <div class="border-t border-dark-border/50"></div>
-            <div id="timers-container" class="space-y-4 pb-12"></div>
-            <div id="timer-empty" class="hidden py-12 text-center opacity-40 select-none"><i data-lucide="clock" class="w-12 h-12 mx-auto mb-3 text-dark-subtext"></i><p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">No Active Timers</p></div>
-        </div>
-    </div>
-
-    <!-- FAB -->
-    <button id="fab-new-task" onclick="openTrackerModal()" class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"><i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i></button>
-
-    <!-- Tracker Modal -->
-    <div id="tracker-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity">
-        <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
-            <h3 id="modal-title" class="text-lg font-bold text-white mb-6 flex items-center gap-2"><i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>Edit Task</span></h3>
-            <div class="space-y-4">
-                <div><label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">Title</label><input type="text" id="modal-name" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none transition-colors"></div>
-                <div>
-                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">URL</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="modal-url" placeholder="Paste link here..." class="flex-1 min-w-0 bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors">
-                        <button onclick="document.getElementById('modal-url').value=''" class="bg-red-500/10 border border-red-500/30 text-red-400 hover:text-white hover:bg-red-500 rounded-lg px-3 transition-colors flex items-center justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                        <button type="button" onclick="pasteToUrl()" class="bg-dark-input border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white rounded-lg px-3 transition-colors flex items-center justify-center shadow-sm"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
-                    </div>
-                </div>
-                <div><label class="text-xs font-bold text-dark-subtext uppercase mb-1 flex items-center gap-2"><span>Auto Open At (24h)</span></label><div class="relative"><input type="time" id="modal-schedule" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors"><div class="absolute right-3 top-2 pointer-events-none text-dark-subtext"><i data-lucide="clock" class="w-4 h-4"></i></div></div></div>
-            </div>
-            <div class="grid grid-cols-2 gap-3 mt-6">
-                <button onclick="closeTrackerModal()" class="py-2.5 text-xs font-bold text-dark-subtext hover:bg-white/5 rounded-lg transition-colors">CANCEL</button>
-                <button onclick="saveTrackerTask()" class="py-2.5 text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 rounded-lg shadow-lg transition-colors">SAVE CLOUD</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Mutual Modal -->
-    <div id="mutual-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity overflow-y-auto">
-        <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-lg p-6 relative max-h-[90vh] flex flex-col">
-            <div class="flex justify-between items-start mb-4 shrink-0">
-                <div><h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-purple-400"></i><span>互助簽到 (Cloud)</span></h3><p class="text-xs text-dark-subtext mt-1">資料已同步至雲端，全員可見</p></div>
-                <div class="flex gap-2">
-                     <button onclick="toggleMutualSettings()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10"><i data-lucide="settings" class="w-5 h-5"></i></button>
-                     <button onclick="resetRound()" class="text-dark-subtext hover:text-orange-400 p-1 rounded hover:bg-white/10" title="清空全部"><i data-lucide="rotate-ccw" class="w-5 h-5"></i></button>
-                     <button onclick="closeMutualModal()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10"><i data-lucide="x" class="w-5 h-5"></i></button>
-                </div>
-            </div>
-            <div id="mutual-settings" class="hidden flex-1 flex flex-col mb-4 overflow-y-auto no-scrollbar">
-                <div class="bg-dark-card border border-dark-border rounded-lg p-4 flex-1 space-y-4">
-                    <div><label class="text-xs font-bold text-white uppercase mb-2 block flex justify-between"><span>目標次數</span><span class="text-emerald-400 font-mono" id="target-display">3</span></label><input type="number" id="mutual-target-input" value="3" min="1" class="w-full bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none transition-colors"></div>
-                    <div><label class="text-xs font-bold text-white uppercase mb-2 block">編輯名單</label><textarea id="mutual-names-input" class="w-full h-32 bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none resize-none" placeholder="Name 1&#10;Name 2"></textarea></div>
-                    <button onclick="saveMutualConfig()" class="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg transition-colors shadow-lg">儲存設定</button>
-                </div>
-            </div>
-            <div id="mutual-quick-helper" class="mb-4 bg-dark-input/50 rounded-lg p-3 border border-dark-border shrink-0"><p class="text-[10px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-1"><i data-lucide="zap" class="w-3 h-3"></i> 今日值日生 (一鍵標記所有人)</p><div id="mutual-helper-buttons" class="flex flex-wrap gap-2"></div></div>
-            <div id="mutual-list" class="space-y-4 overflow-y-auto no-scrollbar flex-1 pr-1 pb-2"></div>
-        </div>
-    </div>
-
-    <!-- UI Scripts -->
-    <script>
-        // --- UI & View Functions ---
-        const pad = (n) => String(n).padStart(2, '0');
-        const formatTime = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-        const formatTimeWithSeconds = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-        const getTaipeiDate = () => new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-
-        const viewTimer = document.getElementById('view-timer'), viewTracker = document.getElementById('view-tracker');
-        const btnTracker = document.getElementById('btn-view-tracker'), btnTimer = document.getElementById('btn-view-timer');
-        const inputH = document.getElementById('t-h'), inputM = document.getElementById('t-m'), inputS = document.getElementById('t-s'), btnSubmit = document.getElementById('t-submit'), globalDelayInput = document.getElementById('global-delay');
-
-        const savedDelay = localStorage.getItem('dashboard-global-delay');
-        if (savedDelay) globalDelayInput.value = savedDelay;
-        globalDelayInput.addEventListener('input', (e) => localStorage.setItem('dashboard-global-delay', e.target.value));
-
-        function switchView(viewName) {
-            if (viewName === 'timer') {
-                viewTimer.classList.remove('hidden'); viewTracker.classList.add('hidden');
-                btnTimer.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0";
-                btnTracker.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0";
-            } else {
-                viewTimer.classList.add('hidden'); viewTracker.classList.remove('hidden'); viewTracker.classList.add('view-section'); 
-                btnTracker.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0";
-                btnTimer.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0";
-            }
-        }
-        window.switchView = switchView;
-
-        // Auto Focus Logic
-        const focusNext = (currentId) => {
-            if (currentId === 't-h') inputM.focus(); else if (currentId === 't-m') inputS.focus(); else if (currentId === 't-s') btnSubmit.focus();
-        };
-        [inputH, inputM, inputS].forEach(input => {
-            input.addEventListener('focus', function() { this.select(); });
-            input.addEventListener('input', function() { if (this.id !== 't-h' && this.value.length >= 2) focusNext(this.id); });
-            input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); if (this.id === 't-s' || (this.value && this.id !== 't-s')) { if (this.id === 't-s') document.getElementById('timer-form').requestSubmit(); else focusNext(this.id); } } });
-        });
-
-        // Mutual UI
-        const mutualModalEl = document.getElementById('mutual-modal'), mutualListEl = document.getElementById('mutual-list'), mutualSettingsEl = document.getElementById('mutual-settings');
-        const mutualNamesInput = document.getElementById('mutual-names-input'), mutualTargetInput = document.getElementById('mutual-target-input'), mutualHelperButtonsEl = document.getElementById('mutual-helper-buttons');
-
-        function saveMutual() { window.saveMutualToCloud(window.mutualData); }
-        window.saveMutual = saveMutual;
-        function openMutualModal() { renderMutualList(); mutualSettingsEl.classList.add('hidden'); mutualListEl.classList.remove('hidden'); mutualModalEl.classList.remove('hidden'); lucide.createIcons(); }
-        window.openMutualModal = openMutualModal;
-        function closeMutualModal() { mutualModalEl.classList.add('hidden'); }
-        window.closeMutualModal = closeMutualModal;
-        function toggleMutualSettings() { if (mutualSettingsEl.classList.contains('hidden')) { mutualSettingsEl.classList.remove('hidden'); mutualListEl.classList.add('hidden'); mutualNamesInput.value = (window.mutualData.names || []).join('\n'); mutualTargetInput.value = window.mutualData.target || 3; document.getElementById('target-display').textContent = window.mutualData.target || 3; } else { mutualSettingsEl.classList.add('hidden'); mutualListEl.classList.remove('hidden'); } }
-        window.toggleMutualSettings = toggleMutualSettings;
-        function saveMutualConfig() {
-            const newNames = mutualNamesInput.value.split('\n').map(s => s.trim()).filter(s => s);
-            if (!newNames.length) return alert('請至少輸入一個名字');
-            const newUsers = {};
-            newNames.forEach(n => { newUsers[n] = window.mutualData.users[n] || { url: '', history: [], todayHelper: null }; });
-            window.mutualData.names = newNames; window.mutualData.users = newUsers; window.mutualData.target = parseInt(mutualTargetInput.value) || 3;
-            saveMutual(); toggleMutualSettings(); renderMutualList();
-        }
-        window.saveMutualConfig = saveMutualConfig;
-        function updateMutualUrl(name, url) {
+        async function updateMutualUrl(name, url) {
             if (!window.mutualData.users[name]) window.mutualData.users[name] = { url: '', history: [], todayHelper: null };
             window.mutualData.users[name].url = url.trim();
-            saveMutual();
+            saveMutualToCloud(window.mutualData);
         }
         window.updateMutualUrl = updateMutualUrl;
-        function toggleHistory(target, helper) {
-            const user = window.mutualData.users[target]; if (!user) return;
-            const idx = user.history.indexOf(helper);
-            if (idx > -1) { user.history.splice(idx, 1); if (user.todayHelper === helper) user.todayHelper = null; } else { user.history.push(helper); user.todayHelper = helper; }
-            saveMutual(); renderMutualList();
+
+        // --- 6. UI RENDER FUNCTIONS ---
+        
+        // Render Timers
+        function renderTimers() {
+            const tContainer = document.getElementById('timers-container');
+            const tEmpty = document.getElementById('timer-empty');
+            
+            if(!tContainer || !tEmpty) return;
+
+            if(!timerData.length) { 
+                tContainer.innerHTML = ''; 
+                tEmpty.classList.remove('hidden'); 
+                return; 
+            }
+            tEmpty.classList.add('hidden');
+            
+            tContainer.innerHTML = timerData.map(t => {
+                const total = t.totalSeconds || 60; 
+                const percent = Math.max(0, (t.remaining / total) * 100); 
+                const isDone = t.isFinished;
+                const statusClass = isDone ? 'bg-red-500/10 border-red-500/30' : 'bg-dark-card border-dark-border';
+                const progressColor = isDone ? 'bg-red-500' : 'bg-blue-500';
+                const h = Math.floor(t.remaining / 3600), m = Math.floor((t.remaining % 3600) / 60), s = t.remaining % 60;
+                const fmt = h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+                
+                return `<div class="relative ${statusClass} border rounded-xl p-4 overflow-hidden transition-all group hover:border-slate-500 pr-12"><div class="absolute bottom-0 left-0 h-1 ${progressColor} transition-all duration-1000 opacity-60" style="width: ${percent}%"></div><div class="flex justify-between items-center relative z-10"><div class="flex items-center gap-4 overflow-hidden flex-1"><div class="w-12 h-12 flex-shrink-0 rounded-xl ${isDone ? 'bg-red-500/20' : 'bg-blue-500/10'} flex items-center justify-center border border-white/5">${isDone ? '<i data-lucide="bell" class="w-6 h-6 text-red-500 animate-bounce"></i>' : '<i data-lucide="timer" class="w-6 h-6 text-blue-400"></i>'}</div><div class="min-w-0 flex flex-col justify-center"><div class="font-medium text-xs text-dark-subtext truncate mb-1 uppercase tracking-wide flex items-center gap-1">${t.label}${t.hasDelay ? '<span class="text-[9px] text-amber-400 bg-amber-400/10 px-1 rounded border border-amber-400/20">BUFFER</span>' : ''}</div><div class="font-mono font-bold ${isDone ? 'text-red-400' : 'text-white'} text-2xl sm:text-3xl leading-none tracking-tight">${isDone ? 'TIME UP' : fmt}</div></div></div><div class="flex items-center gap-3"><div class="flex flex-col items-end justify-center pl-4 border-l border-white/10"><span class="text-[10px] font-bold text-dark-subtext uppercase tracking-wider mb-1">Ends At</span><span class="font-mono font-bold text-emerald-400 text-2xl sm:text-3xl leading-none">${formatTime(t.endTime)}</span></div><button onclick="deleteTimerFromCloud('${t.id}')" class="w-8 h-8 flex items-center justify-center border border-red-500/40 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all ml-1 shrink-0"><i data-lucide="x" class="w-5 h-5"></i></button></div></div></div>`;
+            }).join('');
+            lucide.createIcons();
         }
-        window.toggleHistory = toggleHistory;
-        function markAllAsHelpedBy(helper) {
-            if(!confirm(`確定今天由「${helper}」幫大家簽到嗎？`)) return;
-            (window.mutualData.names||[]).forEach(t => { if (t !== helper && window.mutualData.users[t]) { if (!window.mutualData.users[t].history.includes(helper)) window.mutualData.users[t].history.push(helper); window.mutualData.users[t].todayHelper = helper; } });
-            saveMutual(); renderMutualList();
+        window.renderTimers = renderTimers;
+
+        // Render Tracker
+        function renderTracker() {
+            const listEl = document.getElementById('tracker-list');
+            const empty = document.getElementById('tracker-empty');
+            
+            if(!listEl || !empty) return;
+
+            if(!trackerData.length) { 
+                listEl.innerHTML = ''; 
+                empty.classList.remove('hidden'); 
+                return; 
+            }
+            empty.classList.add('hidden');
+
+            const allSel = trackerData.length && trackerData.every(l=>selectedTrackerIds.has(l.id)); 
+            const hasSel = selectedTrackerIds.size > 0;
+            const btnSelectAll = document.getElementById('btn-select-all');
+            const btnDelete = document.getElementById('btn-delete-selected');
+
+            if(btnSelectAll) btnSelectAll.className = `text-xs border px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0 ${allSel ? 'bg-blue-600 text-white border-blue-600' : 'bg-dark-card border-dark-border text-dark-subtext'}`;
+            if(btnDelete) {
+                if(hasSel) btnDelete.classList.remove('hidden'); 
+                else btnDelete.classList.add('hidden');
+            }
+
+            listEl.innerHTML = trackerData.map((l, idx) => {
+                const count = l.clicks || 0; 
+                const sel = selectedTrackerIds.has(l.id);
+                const dots = count > 5 ? `<span class="text-xs font-mono font-bold text-emerald-400">${count} runs</span>` : Array(count).fill(`<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>`).join('');
+                const sched = l.schedule ? `<div class="flex items-center gap-1.5 bg-dark-bg/50 px-2 py-1 rounded border border-white/5 ml-auto md:ml-0 md:mr-2"><i data-lucide="clock" class="w-3 h-3 ${l.executed?'text-dark-subtext':'text-amber-400'}"></i><span class="text-[10px] font-mono font-bold ${l.executed?'text-dark-subtext opacity-50 line-through':'text-amber-400'}">${l.schedule}</span></div>` : '';
+                const hasUrl = !!l.url;
+                return `
+                <div class="group relative bg-dark-card border border-dark-border hover:border-slate-500 rounded-xl p-3 flex items-center gap-3 transition-all select-none shadow-sm">
+                    <div class="flex items-center justify-center pl-1 pr-2"><input type="checkbox" class="custom-checkbox" onchange="toggleTrackerSelection('${l.id}')" ${sel?'checked':''}></div>
+                    <div class="flex-1 min-w-0"><div class="flex items-center justify-between mb-0.5"><h3 class="font-medium text-sm text-white truncate pr-2">${l.name}</h3>${sched}</div><div class="flex items-center gap-2 h-4">${dots}</div></div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="if('${l.url}') openUrl('${l.url}'); else alert('無連結'); window.updateTaskInCloud('${l.id}', {clicks:((${l.clicks}||0)+1)})" class="bg-blue-600/10 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 flex items-center gap-1">GO <i data-lucide="external-link" class="w-3 h-3"></i></button>
+                        <div class="flex flex-col gap-1 border-l border-white/5 pl-2">
+                            <button onclick="quickPaste(${idx})" class="text-dark-subtext/60 hover:text-emerald-400 p-1" title="貼上覆蓋"><i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i></button>
+                            ${l.url ? `<button onclick="clearTrackerUrl('${l.id}')" class="text-dark-subtext/60 hover:text-red-400 p-1" title="清除連結"><i data-lucide="link-2-off" class="w-3.5 h-3.5"></i></button>` : ''}
+                            <button onclick="openTrackerModal(); window.setEditing('${l.id}', '${l.name}', '${l.url}', '${l.schedule||''}');" class="text-dark-subtext/60 hover:text-white p-1"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="if(confirm('刪除？')) window.deleteTaskFromCloud('${l.id}')" class="text-dark-subtext/60 hover:text-red-400 p-1"><i data-lucide="trash" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+            lucide.createIcons();
         }
-        window.markAllAsHelpedBy = markAllAsHelpedBy;
-        function resetRound() {
-            if(!confirm("確定要清空所有人的今日簽到紀錄嗎？")) return;
-            (window.mutualData.names||[]).forEach(n => { if(window.mutualData.users[n]) { window.mutualData.users[n].todayHelper = null; window.mutualData.users[n].history = []; } });
-            saveMutual(); renderMutualList();
-        }
-        window.resetRound = resetRound;
+        window.renderTracker = renderTracker;
+
+        // Render Mutual
         function renderMutualList() {
-            const d = window.mutualData; const names = d.names || [];
+            const d = window.mutualData; 
+            const names = d.names || [];
+            const mutualHelperButtonsEl = document.getElementById('mutual-helper-buttons');
+            const mutualListEl = document.getElementById('mutual-list');
+
+            if(!mutualHelperButtonsEl || !mutualListEl) return;
+
             mutualHelperButtonsEl.innerHTML = names.map(n => `<button onclick="markAllAsHelpedBy('${n}')" class="px-3 py-1 bg-dark-card border border-dark-border rounded text-xs font-bold hover:bg-blue-600 hover:text-white transition-colors">${n}</button>`).join('');
             mutualListEl.innerHTML = names.map(n => {
                 const u = d.users[n] || { url: '', history: [], todayHelper: null };
@@ -543,126 +261,234 @@
         }
         window.renderMutualList = renderMutualList;
 
-        // Tracker UI
-        let editingId = null; let selectedTrackerIds = new Set();
-        const listEl = document.getElementById('tracker-list'), modalEl = document.getElementById('tracker-modal'), popupWarning = document.getElementById('popup-warning'), popupWarningIcon = document.getElementById('popup-warning-icon');
+        // --- 7. MAIN LOGIC & LOOPS ---
 
-        function toggleTrackerSelection(id) { if (selectedTrackerIds.has(id)) selectedTrackerIds.delete(id); else selectedTrackerIds.add(id); renderTracker(); }
-        window.toggleTrackerSelection = toggleTrackerSelection;
-        function toggleSelectAll() { const all = window.getTrackerData().map(l=>l.id); if (all.every(id=>selectedTrackerIds.has(id))) selectedTrackerIds.clear(); else all.forEach(id=>selectedTrackerIds.add(id)); renderTracker(); }
-        window.toggleSelectAll = toggleSelectAll;
-        function deleteSelectedTasks() { if(selectedTrackerIds.size && confirm('確定刪除？')) { selectedTrackerIds.forEach(id=>window.deleteTaskFromCloud(id)); selectedTrackerIds.clear(); } }
-        window.deleteSelectedTasks = deleteSelectedTasks;
-        
-        async function quickPaste(idx) {
-            try { const text = await navigator.clipboard.readText(); const clean = window.extractUrl(text); const data = window.getTrackerData(); window.updateTaskInCloud(data[idx].id, { url: clean }); } 
-            catch(e) { const m = prompt('手動貼上:'); if(m) window.updateTaskInCloud(window.getTrackerData()[idx].id, { url: window.extractUrl(m) }); }
-        }
-        window.quickPaste = quickPaste;
-        function clearTrackerUrl(id) { if(confirm('清除連結？')) window.updateTaskInCloud(id, { url: '' }); }
-        window.clearTrackerUrl = clearTrackerUrl;
-
-        function renderTracker() {
-            const data = window.getTrackerData(); const empty = document.getElementById('tracker-empty');
-            if(!data.length) { listEl.innerHTML = ''; empty.classList.remove('hidden'); return; }
-            empty.classList.add('hidden');
-            const allSel = data.length && data.every(l=>selectedTrackerIds.has(l.id)); const hasSel = selectedTrackerIds.size > 0;
-            document.getElementById('btn-select-all').className = `text-xs border px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0 ${allSel ? 'bg-blue-600 text-white border-blue-600' : 'bg-dark-card border-dark-border text-dark-subtext'}`;
-            if(hasSel) document.getElementById('btn-delete-selected').classList.remove('hidden'); else document.getElementById('btn-delete-selected').classList.add('hidden');
-
-            listEl.innerHTML = data.map((l, idx) => {
-                const count = l.clicks || 0; const sel = selectedTrackerIds.has(l.id);
-                const dots = count > 5 ? `<span class="text-xs font-mono font-bold text-emerald-400">${count} runs</span>` : Array(count).fill(`<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>`).join('');
-                const sched = l.schedule ? `<div class="flex items-center gap-1.5 bg-dark-bg/50 px-2 py-1 rounded border border-white/5 ml-auto md:ml-0 md:mr-2"><i data-lucide="clock" class="w-3 h-3 ${l.executed?'text-dark-subtext':'text-amber-400'}"></i><span class="text-[10px] font-mono font-bold ${l.executed?'text-dark-subtext opacity-50 line-through':'text-amber-400'}">${l.schedule}</span></div>` : '';
-                const hasUrl = !!l.url;
-                return `
-                <div class="group relative bg-dark-card border border-dark-border hover:border-slate-500 rounded-xl p-3 flex items-center gap-3 transition-all select-none shadow-sm">
-                    <div class="flex items-center justify-center pl-1 pr-2"><input type="checkbox" class="custom-checkbox" onchange="toggleTrackerSelection('${l.id}')" ${sel?'checked':''}></div>
-                    <div class="flex-1 min-w-0"><div class="flex items-center justify-between mb-0.5"><h3 class="font-medium text-sm text-white truncate pr-2">${l.name}</h3>${sched}</div><div class="flex items-center gap-2 h-4">${dots}</div></div>
-                    <div class="flex items-center gap-2">
-                        <button onclick="if('${l.url}') openUrl('${l.url}'); else alert('無連結'); window.updateTaskInCloud('${l.id}', {clicks:((${l.clicks}||0)+1)})" class="bg-blue-600/10 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 flex items-center gap-1">GO <i data-lucide="external-link" class="w-3 h-3"></i></button>
-                        <div class="flex flex-col gap-1 border-l border-white/5 pl-2">
-                            <button onclick="quickPaste(${idx})" class="text-dark-subtext/60 hover:text-emerald-400 p-1" title="貼上覆蓋"><i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i></button>
-                            <button onclick="clearTrackerUrl('${l.id}')" class="${hasUrl ? 'text-dark-subtext/60 hover:text-red-400' : 'hidden'} p-1" title="清除連結"><i data-lucide="link-2-off" class="w-3.5 h-3.5"></i></button>
-                            <button onclick="openTrackerModal(); editingId='${l.id}'; document.getElementById('modal-name').value='${l.name}'; document.getElementById('modal-url').value='${l.url}'; document.getElementById('modal-schedule').value='${l.schedule||''}';" class="text-dark-subtext/60 hover:text-white p-1"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
-                            <button onclick="if(confirm('刪除？')) window.deleteTaskFromCloud('${l.id}')" class="text-dark-subtext/60 hover:text-red-400 p-1"><i data-lucide="trash" class="w-3.5 h-3.5"></i></button>
-                        </div>
-                    </div>
-                </div>`;
-            }).join('');
-            lucide.createIcons();
-        }
-        window.renderTracker = renderTracker;
-
-        function openUrl(url) { if(!url) return; const win = window.open(url.startsWith('http')?url:'https://'+url, '_blank'); if(!win) alert('Pop-up Blocked'); }
-        window.openUrl = openUrl;
-        
-        function saveTrackerTask() {
-            const name = document.getElementById('modal-name').value.trim(); const raw = document.getElementById('modal-url').value.trim(); const sch = document.getElementById('modal-schedule').value;
-            if(!name) return; const clean = window.extractUrl(raw); const data = { name, url: clean, schedule: sch || null };
-            if(editingId) window.updateTaskInCloud(editingId, { ...data, executed: false }); else window.saveTaskToCloud(data);
-            modalEl.classList.add('hidden');
-        }
-        window.saveTrackerTask = saveTrackerTask;
-        function closeTrackerModal() { modalEl.classList.add('hidden'); editingId=null; }
-        window.closeTrackerModal = closeTrackerModal;
-        function openTrackerModal() { editingId = null; document.getElementById('modal-title').innerHTML = `<i data-lucide="plus" class="w-5 h-5 text-emerald-400"></i><span>New Task</span>`; document.getElementById('modal-name').value = ''; document.getElementById('modal-url').value = ''; document.getElementById('modal-schedule').value = ''; modalEl.classList.remove('hidden'); lucide.createIcons(); }
-        window.openTrackerModal = openTrackerModal;
-
-        async function pasteToMutual(inputId, name) {
-            try { const text = await navigator.clipboard.readText(); const clean = window.extractUrl(text); document.getElementById(inputId).value = clean; updateMutualUrl(name, clean); } catch (err) { alert('請手動貼上'); }
-        }
-        window.pasteToMutual = pasteToMutual;
-
-        async function pasteToUrl() {
-            try { const text = await navigator.clipboard.readText(); const clean = window.extractUrl(text); const el = document.getElementById('modal-url'); el.value = clean; el.focus(); el.classList.add('border-green-500'); setTimeout(() => el.classList.remove('border-green-500'), 500); } catch (err) { alert('請手動貼上'); }
-        }
-        window.pasteToUrl = pasteToUrl;
-
-        // Loop
         function checkScheduledTasks(now) {
             const hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
-            window.getTrackerData().forEach(l => {
+            trackerData.forEach(l => {
                 if (l.schedule === hm && !l.executed) {
-                    window.updateTaskInCloud(l.id, { executed: true, clicks: (l.clicks||0)+1 });
+                    updateTaskInCloud(l.id, { executed: true, clicks: (l.clicks||0)+1 });
                     const win = window.open(l.url.startsWith('http')?l.url:'https://'+l.url, '_blank');
-                    if(!win) { popupWarning.classList.remove('hidden'); popupWarningIcon.classList.remove('hidden'); }
+                    if(!win) { 
+                        const popup = document.getElementById('popup-warning');
+                        const icon = document.getElementById('popup-warning-icon');
+                        if(popup) popup.classList.remove('hidden'); 
+                        if(icon) icon.classList.remove('hidden'); 
+                    }
                 }
             });
         }
 
         function updateTimerLoop() {
             const now = new Date();
-            document.getElementById('header-time-text').textContent = formatTimeWithSeconds(now);
-            document.getElementById('date-text').textContent = getTaipeiDate();
-            document.getElementById('seconds-bar').style.width = `${(now.getSeconds() / 60) * 100}%`;
-            document.getElementById('seconds-text').textContent = pad(now.getSeconds());
-            checkScheduledTasks(now);
-            const timers = window.getTimerData();
-            timers.forEach(t => { if(!(t.endTime instanceof Date)) t.endTime = new Date(t.endTime); t.remaining = Math.max(0, Math.ceil((t.endTime - now) / 1000)); t.isFinished = t.remaining <= 0; });
-            const active = timers.filter(t => !t.isFinished).length;
-            document.getElementById('active-count').textContent = active;
-            document.getElementById('tasks-bar').style.width = active > 0 ? '100%' : '0%';
             
-            // Render Timers (Inlined to fix reference error)
-            const tContainer = document.getElementById('timers-container'), tEmpty = document.getElementById('timer-empty');
-            if(!timers.length) { tContainer.innerHTML = ''; tEmpty.classList.remove('hidden'); return; }
-            tEmpty.classList.add('hidden');
-            tContainer.innerHTML = timers.map(t => {
-                const total = t.totalSeconds || 60; const percent = Math.max(0, (t.remaining / total) * 100); const isDone = t.isFinished;
-                const statusClass = isDone ? 'bg-red-500/10 border-red-500/30' : 'bg-dark-card border-dark-border';
-                const progressColor = isDone ? 'bg-red-500' : 'bg-blue-500';
-                const h = Math.floor(t.remaining / 3600), m = Math.floor((t.remaining % 3600) / 60), s = t.remaining % 60;
-                const fmt = h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
-                return `<div class="relative ${statusClass} border rounded-xl p-4 overflow-hidden transition-all group hover:border-slate-500 pr-12"><div class="absolute bottom-0 left-0 h-1 ${progressColor} transition-all duration-1000 opacity-60" style="width: ${percent}%"></div><div class="flex justify-between items-center relative z-10"><div class="flex items-center gap-4 overflow-hidden flex-1"><div class="w-12 h-12 flex-shrink-0 rounded-xl ${isDone ? 'bg-red-500/20' : 'bg-blue-500/10'} flex items-center justify-center border border-white/5">${isDone ? '<i data-lucide="bell" class="w-6 h-6 text-red-500 animate-bounce"></i>' : '<i data-lucide="timer" class="w-6 h-6 text-blue-400"></i>'}</div><div class="min-w-0 flex flex-col justify-center"><div class="font-medium text-xs text-dark-subtext truncate mb-1 uppercase tracking-wide flex items-center gap-1">${t.label}${t.hasDelay ? '<span class="text-[9px] text-amber-400 bg-amber-400/10 px-1 rounded border border-amber-400/20">BUFFER</span>' : ''}</div><div class="font-mono font-bold ${isDone ? 'text-red-400' : 'text-white'} text-2xl sm:text-3xl leading-none tracking-tight">${isDone ? 'TIME UP' : fmt}</div></div></div><div class="flex items-center gap-3"><div class="flex flex-col items-end justify-center pl-4 border-l border-white/10"><span class="text-[10px] font-bold text-dark-subtext uppercase tracking-wider mb-1">Ends At</span><span class="font-mono font-bold text-emerald-400 text-2xl sm:text-3xl leading-none">${formatTime(t.endTime)}</span></div><button onclick="deleteTimerFromCloud('${t.id}')" class="w-8 h-8 flex items-center justify-center border border-red-500/40 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all ml-1 shrink-0"><i data-lucide="x" class="w-5 h-5"></i></button></div></div></div>`;
-            }).join('');
-            lucide.createIcons();
+            // Safe DOM Updates
+            const headerTimeEl = document.getElementById('header-time-text');
+            if (headerTimeEl) headerTimeEl.textContent = formatTimeWithSeconds(now);
+            
+            const dateTextEl = document.getElementById('date-text');
+            if (dateTextEl) dateTextEl.textContent = getTaipeiDate();
+            
+            const secBarEl = document.getElementById('seconds-bar');
+            if (secBarEl) secBarEl.style.width = `${(now.getSeconds() / 60) * 100}%`;
+            
+            const secTextEl = document.getElementById('seconds-text');
+            if (secTextEl) secTextEl.textContent = pad(now.getSeconds());
+            
+            checkScheduledTasks(now);
+
+            // Timer update logic
+            timerData.forEach(t => { 
+                if(!(t.endTime instanceof Date)) t.endTime = new Date(t.endTime); 
+                t.remaining = Math.max(0, Math.ceil((t.endTime - now) / 1000)); 
+                t.isFinished = t.remaining <= 0; 
+            });
+
+            const active = timerData.filter(t => !t.isFinished).length;
+            const activeCountEl = document.getElementById('active-count');
+            if(activeCountEl) activeCountEl.textContent = active;
+            
+            const tasksBarEl = document.getElementById('tasks-bar');
+            if(tasksBarEl) tasksBarEl.style.width = active > 0 ? '100%' : '0%';
+
+            renderTimers();
         }
         window.updateTimerLoop = updateTimerLoop;
-        setInterval(updateTimerLoop, 1000);
 
-        // Timer Submit
-        document.getElementById('timer-form').addEventListener('submit', (e) => { e.preventDefault(); const t = (parseInt(inputH.value)||0)*3600 + (parseInt(inputM.value)||0)*60 + (parseInt(inputS.value)||0) + (parseInt(globalDelayInput.value)||0)*60; if(t>0) window.saveTimerToCloud({ label: document.getElementById('t-label').value.trim()||'Task', endTime: new Date(Date.now()+t*1000), totalSeconds: t }); inputH.value=inputM.value=inputS.value=''; });
+        // --- 8. AUTH & FIRESTORE SETUP ---
+        function getCollections() {
+            if (!currentWorkspaceId) return null;
+            return {
+                tasks: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_tasks`),
+                timers: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_timers`),
+                mutualDoc: doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_mutual`, 'config')
+            };
+        }
+
+        function initFirestoreListeners() {
+            const cols = getCollections();
+            if (!cols) return;
+
+            onSnapshot(query(cols.tasks, orderBy('createdAt', 'desc')), (snapshot) => {
+                trackerData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderTracker();
+            });
+
+            onSnapshot(cols.timers, (snapshot) => {
+                timerData = snapshot.docs.map(d => ({ id: d.id, ...d.data(), endTime: d.data().endTime ? d.data().endTime.toDate() : new Date() }));
+                updateTimerLoop(); 
+            });
+
+            onSnapshot(cols.mutualDoc, (docSnap) => {
+                if (docSnap.exists()) {
+                    window.mutualData = docSnap.data();
+                    renderMutualList();
+                }
+                if (!isMutualLoaded) {
+                    isMutualLoaded = true;
+                    checkIncomingShare(); 
+                }
+            });
+            
+            const wsDisplay = document.getElementById('workspace-id-display');
+            if(wsDisplay) wsDisplay.textContent = currentWorkspaceId;
+        }
+
+        function checkIncomingShare() {
+            if (!isMutualLoaded) return; 
+            if (!pendingShare) return;
+
+            const cleanUrl = extractUrl(pendingShare.url);
+            const name = pendingShare.title.trim();
+            const mutualNames = window.mutualData.names || [];
+            const matchName = mutualNames.find(n => n.toLowerCase() === name.toLowerCase());
+
+            if (matchName) {
+                updateMutualUrl(matchName, cleanUrl);
+                showToast(`已更新互助: ${matchName}`, 'success');
+            } else {
+                saveTaskToCloud({ name: name, url: cleanUrl, schedule: null });
+                showToast(`已自動存入清單: ${name}`, 'success');
+            }
+            pendingShare = null;
+        }
+
+        // --- 9. UI EVENT HANDLERS ---
+        function setEditing(id, name, url, schedule) {
+            editingId = id;
+            document.getElementById('modal-title').innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>Edit Task</span>`;
+            document.getElementById('modal-name').value = name;
+            document.getElementById('modal-url').value = url;
+            document.getElementById('modal-schedule').value = schedule;
+            document.getElementById('tracker-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+        window.setEditing = setEditing;
+
+        function closeTrackerModal() { document.getElementById('tracker-modal').classList.add('hidden'); editingId=null; }
+        window.closeTrackerModal = closeTrackerModal;
+
+        function openTrackerModal() {
+            editingId = null;
+            document.getElementById('modal-title').innerHTML = `<i data-lucide="plus" class="w-5 h-5 text-emerald-400"></i><span>New Task</span>`;
+            document.getElementById('modal-name').value = '';
+            document.getElementById('modal-url').value = '';
+            document.getElementById('modal-schedule').value = '';
+            document.getElementById('tracker-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+        window.openTrackerModal = openTrackerModal;
+
+        function saveTrackerTask() {
+            const name = document.getElementById('modal-name').value.trim();
+            const raw = document.getElementById('modal-url').value.trim();
+            const sch = document.getElementById('modal-schedule').value;
+            if(!name) return;
+            const clean = extractUrl(raw);
+            const data = { name, url: clean, schedule: sch || null };
+            if(editingId) updateTaskInCloud(editingId, { ...data, executed: false }); else saveTaskToCloud(data);
+            document.getElementById('tracker-modal').classList.add('hidden');
+        }
+        window.saveTrackerTask = saveTrackerTask;
+        
+        // Other Modals
+        window.openMutualModal = () => { renderMutualList(); document.getElementById('mutual-settings').classList.add('hidden'); document.getElementById('mutual-list').classList.remove('hidden'); document.getElementById('mutual-modal').classList.remove('hidden'); lucide.createIcons(); };
+        window.closeMutualModal = () => document.getElementById('mutual-modal').classList.add('hidden');
+        window.toggleMutualSettings = () => { 
+            const s = document.getElementById('mutual-settings'), l = document.getElementById('mutual-list');
+            if (s.classList.contains('hidden')) { s.classList.remove('hidden'); l.classList.add('hidden'); document.getElementById('mutual-names-input').value = (window.mutualData.names || []).join('\n'); document.getElementById('mutual-target-input').value = window.mutualData.target || 3; } 
+            else { s.classList.add('hidden'); l.classList.remove('hidden'); } 
+        };
+        window.showResetMenu = () => document.getElementById('reset-menu-modal').classList.remove('hidden');
+        window.closeResetMenu = () => document.getElementById('reset-menu-modal').classList.add('hidden');
+
+        // --- 10. AUTH LISTENER & INIT ---
+        const switchLoginState = (isLoggedIn) => {
+            const loginScreen = document.getElementById('login-screen');
+            const mainApp = document.getElementById('main-app');
+            const fab = document.getElementById('fab-new-task');
+
+            if (!loginScreen || !mainApp || !fab) return;
+
+            if (isLoggedIn) {
+                loginScreen.classList.add('hidden');
+                mainApp.classList.remove('hidden');
+                fab.classList.remove('hidden');
+            } else {
+                loginScreen.classList.remove('hidden');
+                mainApp.classList.add('hidden');
+                fab.classList.add('hidden');
+            }
+        };
+
+        const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) { alert(e); } };
+
+        window.handleLogin = (e) => {
+            e.preventDefault();
+            const inputId = document.getElementById('workspace-input').value.trim();
+            if (!inputId) return alert("請輸入空間代碼");
+            currentWorkspaceId = inputId;
+            localStorage.setItem('cmd_workspace_id', inputId);
+            switchLoginState(true);
+            initFirestoreListeners();
+        };
+
+        window.handleLogout = () => {
+            if(confirm('確定要登出嗎？')) {
+                localStorage.removeItem('cmd_workspace_id');
+                const url = new URL(window.location);
+                url.searchParams.delete('space_id');
+                window.history.pushState({}, '', url);
+                window.location.reload();
+            }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user && currentWorkspaceId) {
+                switchLoginState(true);
+                initFirestoreListeners();
+                setTimeout(() => {
+                    if (!isMutualLoaded) { 
+                        isMutualLoaded = true; 
+                        checkIncomingShare(); 
+                    }
+                }, 2000);
+            } else if (user) {
+                switchLoginState(false);
+            }
+        });
+
+        // Start Loop
+        setInterval(updateTimerLoop, 1000);
+        
+        // Timer Form
+        const timerForm = document.getElementById('timer-form');
+        if(timerForm) {
+            timerForm.addEventListener('submit', (e) => { e.preventDefault(); const t = (parseInt(inputH.value)||0)*3600 + (parseInt(inputM.value)||0)*60 + (parseInt(inputS.value)||0) + (parseInt(globalDelayInput.value)||0)*60; if(t>0) window.saveTimerToCloud({ label: document.getElementById('t-label').value.trim()||'Task', endTime: new Date(Date.now()+t*1000), totalSeconds: t }); inputH.value=inputM.value=inputS.value=''; });
+        }
+
+        initAuth();
     </script>
 </body>
 </html>
