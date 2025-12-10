@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V3 - Auto Save</title>
+    <title>Command Center V3 - Final</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -45,6 +45,9 @@
         let unsubTasks = null;
         let unsubTimers = null;
         let unsubMutual = null;
+        
+        // Flag to ensure we don't process shortcuts before data is loaded
+        let isMutualLoaded = false;
 
         // --- NEW: Check for Auto-Login via URL Params ---
         const urlParams = new URLSearchParams(window.location.search);
@@ -78,8 +81,6 @@
             
             // Trigger data load
             initFirestoreListeners();
-            // Check share AFTER manual login
-            checkIncomingShare();
         };
 
         window.handleLogout = () => {
@@ -102,11 +103,7 @@
                     document.getElementById('login-screen').classList.add('hidden');
                     document.getElementById('main-app').classList.remove('hidden');
                     initFirestoreListeners();
-                    // Update ID display
                     document.getElementById('workspace-id-display').textContent = currentWorkspaceId;
-                    
-                    // Check for incoming shortcut share only if logged in
-                    checkIncomingShare(); 
                 } else {
                     document.getElementById('login-screen').classList.remove('hidden');
                     document.getElementById('main-app').classList.add('hidden');
@@ -153,6 +150,13 @@
                 if (docSnap.exists()) {
                     window.mutualData = docSnap.data();
                     window.renderMutualList();
+                }
+                
+                // Data loaded signal
+                if (!isMutualLoaded) {
+                    isMutualLoaded = true;
+                    // Check for pending shares only after we know the mutual list names
+                    checkIncomingShare(); 
                 }
             });
             
@@ -718,14 +722,36 @@
         });
 
         // =======================
-        // PASTE LOGIC
+        // PASTE LOGIC (SMART EXTRACT)
         // =======================
+        window.pasteToMutual = async (inputId, name) => {
+            try {
+                const text = await navigator.clipboard.readText();
+                
+                // Extract URL using regex
+                const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
+                const cleanUrl = urlMatch ? urlMatch[0] : text;
+
+                const input = document.getElementById(inputId);
+                input.value = cleanUrl;
+                updateMutualUrl(name, cleanUrl);
+                
+            } catch (err) {
+                 alert('請手動貼上');
+            }
+        }
+
         window.pasteToUrl = async () => {
             try {
                 const text = await navigator.clipboard.readText();
+                
+                const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
+                const cleanUrl = urlMatch ? urlMatch[0] : text;
+
                 const urlInput = document.getElementById('modal-url');
-                urlInput.value = text;
+                urlInput.value = cleanUrl;
                 urlInput.focus();
+                
                 urlInput.classList.add('border-green-500');
                 setTimeout(() => urlInput.classList.remove('border-green-500'), 500);
             } catch (err) {
@@ -963,9 +989,14 @@
                                 class="w-full bg-dark-input border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors" 
                                 placeholder="貼上 ${name} 的連結...">
                         </div>
-                        <button onclick="pasteToMutual('mutual-input-${name}', '${name}')" class="bg-dark-input border border-dark-border px-3 rounded-lg text-dark-subtext hover:text-white hover:bg-white/5 transition-colors">
-                            <i data-lucide="clipboard-paste" class="w-4 h-4"></i>
-                        </button>
+                        <div class="flex gap-1">
+                            <button onclick="pasteToMutual('mutual-input-${name}', '${name}')" class="bg-dark-input border border-dark-border px-3 rounded-lg text-dark-subtext hover:text-white hover:bg-white/5 transition-colors" title="貼上">
+                                <i data-lucide="clipboard-paste" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="updateMutualUrl('${name}', '')" class="bg-red-500/10 border border-red-500/30 px-3 rounded-lg text-red-400 hover:text-white hover:bg-red-500 transition-colors" title="清除">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="border-t border-white/5 pt-3 relative z-10">
@@ -1213,6 +1244,12 @@
             }
         };
 
+        window.clearTrackerUrl = (id) => {
+            if(confirm('確定要清除此任務的連結嗎？')) {
+                window.updateTaskInCloud(id, { url: '' });
+            }
+        };
+
         window.renderTracker = () => {
             const data = window.getTrackerData();
             const empty = document.getElementById('tracker-empty');
@@ -1269,6 +1306,8 @@
                     `;
                 }
 
+                const hasUrl = !!link.url;
+
                 return `
                 <div class="group relative bg-dark-card border border-dark-border hover:border-slate-500 rounded-xl p-3 flex items-center gap-3 transition-all select-none shadow-sm">
                     <div class="flex items-center justify-center pl-1 pr-2">
@@ -1292,6 +1331,7 @@
                         </button>
                         <div class="flex flex-col gap-1 border-l border-white/5 pl-2">
                             <button onclick="quickPaste(${idx})" class="text-dark-subtext/60 hover:text-emerald-400 p-1" title="快速貼上網址 (覆蓋)"><i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="clearTrackerUrl('${link.id}')" class="${hasUrl ? 'text-dark-subtext/60 hover:text-red-400' : 'hidden'} p-1" title="清除連結"><i data-lucide="link-2-off" class="w-3.5 h-3.5"></i></button>
                             <button onclick="editTracker(${idx})" class="text-dark-subtext/60 hover:text-white p-1"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
                             <button onclick="deleteTracker(${idx})" class="text-dark-subtext/60 hover:text-red-400 p-1"><i data-lucide="trash" class="w-3.5 h-3.5"></i></button>
                         </div>
@@ -1383,34 +1423,42 @@
             }
         };
 
-        // --- SHORTCUT INTENT LOGIC (AUTO-SAVE) ---
+        // --- SHORTCUT INTENT LOGIC (AUTO-SAVE & ROUTE) ---
         function checkIncomingShare() {
+            // Need data to decide routing, so if mutual data not ready, wait
+            if (!isMutualLoaded) return; // Will be called again by onSnapshot
+
             const params = new URLSearchParams(window.location.search);
             const sharedUrl = params.get('share_url');
             const sharedTitle = params.get('share_title');
 
             if (sharedUrl) {
-                // Remove params immediately
                 window.history.replaceState({}, document.title, window.location.pathname);
                 
-                // AUTO SAVE LOGIC
-                const name = sharedTitle || 'Shared Link';
+                const name = (sharedTitle || 'Shared Link').trim();
+                
+                // Smart Extract URL
                 const urlMatch = sharedUrl.match(/(https?:\/\/[^\s]+)/);
                 const cleanUrl = urlMatch ? urlMatch[0] : sharedUrl;
 
-                const taskData = {
-                    name,
-                    url: cleanUrl,
-                    schedule: null, 
-                };
+                // 1. Check if name exists in Mutual List (Case-insensitive check is better UX)
+                const mutualNames = window.mutualData.names || [];
+                const matchName = mutualNames.find(n => n.toLowerCase() === name.toLowerCase());
 
-                // Directly save to cloud without modal
-                window.saveTaskToCloud(taskData);
-                
-                // Optional: Show a small notification toast instead of alert? 
-                // For simplicity, using a non-blocking console log or temporary UI change is better than alert(), 
-                // but alert() confirms it worked. Let's make a custom toast.
-                showToast(`已自動儲存: ${name}`);
+                if (matchName) {
+                    // Route to Mutual List
+                    updateMutualUrl(matchName, cleanUrl);
+                    showToast(`已更新互助連結: ${matchName}`);
+                } else {
+                    // Route to General Task List
+                    const taskData = {
+                        name: name,
+                        url: cleanUrl,
+                        schedule: null, 
+                    };
+                    window.saveTaskToCloud(taskData);
+                    showToast(`已自動儲存: ${name}`);
+                }
             }
         }
 
