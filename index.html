@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V6.1</title>
+    <title>Command Center V6.2</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -266,8 +266,6 @@
             e.preventDefault();
             const text = (e.clipboardData || window.clipboardData).getData('text');
             const clean = extractUrl(text);
-            
-            // Insert cleaned URL or original text if empty (but extraction returns '' so it clears garbage)
             const valToInsert = clean || ''; 
             
             if (document.execCommand && typeof document.execCommand === 'function') {
@@ -276,10 +274,8 @@
                inputEl.value = valToInsert;
             }
             
-            // Trigger input event manually for frameworks/listeners
             inputEl.dispatchEvent(new Event('input', { bubbles: true }));
             
-            // If it's a mutual input, trigger update immediately
             if (inputEl.id.startsWith('mutual-input-')) {
                 const name = inputEl.id.replace('mutual-input-', '');
                 updateMutualUrl(name, valToInsert);
@@ -401,9 +397,8 @@
             if(!confirm(`確定要刪除選取的 ${selectedTrackerIds.size} 個項目嗎？`)) return;
             
             const ids = Array.from(selectedTrackerIds);
-            selectedTrackerIds.clear(); // Clear local first
+            selectedTrackerIds.clear();
             
-            // Delete one by one
             for(const id of ids) {
                 await deleteTaskFromCloud(id);
             }
@@ -457,7 +452,6 @@
             window.mutualData.target = t;
             window.mutualData.names = n;
             
-            // Init new users
             n.forEach(name => {
                 if(!window.mutualData.users[name]) window.mutualData.users[name] = { url:'', history:[], todayHelper:null };
             });
@@ -487,8 +481,6 @@
 
             if(btnSelectAll) {
                 btnSelectAll.className = `text-xs border px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0 ${allSel ? 'bg-blue-600 text-white border-blue-600' : 'bg-dark-card border-dark-border text-dark-subtext'}`;
-                // Re-attach listener correctly to avoid multi-binding issues if rerendered? 
-                // Actually onclick in HTML is fine.
             }
             
             if(btnDelete) {
@@ -615,7 +607,9 @@
                     window.mutualData = docSnap.data();
                     renderMutualList();
                 }
-                // Allow a slight buffer for data to settle, but check share ASAP
+                
+                // CRITICAL FIX: Only run checkIncomingShare AFTER we are sure we have data (or valid empty state from server)
+                // Removed the setTimeout in onAuthStateChanged to prevent race condition.
                 if (!isMutualLoaded) {
                     isMutualLoaded = true;
                     checkIncomingShare(); 
@@ -635,7 +629,6 @@
             const mutualNames = window.mutualData.names || [];
             
             // Broad match: If share name contains mutual name (or vice versa), or exact match
-            // Case-insensitive inclusion search
             const matchName = mutualNames.find(n => {
                 const lowerN = n.toLowerCase();
                 const lowerShare = name.toLowerCase();
@@ -748,12 +741,7 @@
             if (user && currentWorkspaceId) {
                 switchLoginState(true);
                 initFirestoreListeners();
-                setTimeout(() => {
-                    if (!isMutualLoaded) { 
-                        isMutualLoaded = true; 
-                        checkIncomingShare(); 
-                    }
-                }, 2000);
+                // REMOVED: setTimeout race condition
             } else if (user) {
                 switchLoginState(false);
             }
