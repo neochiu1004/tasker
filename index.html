@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V3 - Instant Add</title>
+    <title>Command Center V3 - Auto Save</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -78,6 +78,8 @@
             
             // Trigger data load
             initFirestoreListeners();
+            // Check share AFTER manual login
+            checkIncomingShare();
         };
 
         window.handleLogout = () => {
@@ -102,13 +104,13 @@
                     initFirestoreListeners();
                     // Update ID display
                     document.getElementById('workspace-id-display').textContent = currentWorkspaceId;
+                    
+                    // Check for incoming shortcut share only if logged in
+                    checkIncomingShare(); 
                 } else {
                     document.getElementById('login-screen').classList.remove('hidden');
                     document.getElementById('main-app').classList.add('hidden');
                 }
-                
-                // Check for incoming shortcut share
-                checkIncomingShare(); 
             }
         });
 
@@ -511,7 +513,7 @@
 
     <!-- FAB -->
     <button id="fab-new-task" onclick="openTrackerModal()" 
-        class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group hidden">
+        class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group">
         <i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i>
     </button>
 
@@ -1381,21 +1383,47 @@
             }
         };
 
-        // --- SHORTCUT INTENT LOGIC ---
+        // --- SHORTCUT INTENT LOGIC (AUTO-SAVE) ---
         function checkIncomingShare() {
             const params = new URLSearchParams(window.location.search);
             const sharedUrl = params.get('share_url');
             const sharedTitle = params.get('share_title');
 
             if (sharedUrl) {
-                // IMPORTANT: In Cloud mode, we just auto-save to cloud!
-                // Or we can pop up the modal. Let's pop up modal to confirm title.
+                // Remove params immediately
                 window.history.replaceState({}, document.title, window.location.pathname);
-                openTrackerModal();
-                document.getElementById('modal-url').value = sharedUrl;
-                document.getElementById('modal-name').value = sharedTitle || 'Shared Link';
-                document.getElementById('modal-name').focus();
+                
+                // AUTO SAVE LOGIC
+                const name = sharedTitle || 'Shared Link';
+                const urlMatch = sharedUrl.match(/(https?:\/\/[^\s]+)/);
+                const cleanUrl = urlMatch ? urlMatch[0] : sharedUrl;
+
+                const taskData = {
+                    name,
+                    url: cleanUrl,
+                    schedule: null, 
+                };
+
+                // Directly save to cloud without modal
+                window.saveTaskToCloud(taskData);
+                
+                // Optional: Show a small notification toast instead of alert? 
+                // For simplicity, using a non-blocking console log or temporary UI change is better than alert(), 
+                // but alert() confirms it worked. Let's make a custom toast.
+                showToast(`已自動儲存: ${name}`);
             }
+        }
+
+        // Simple Toast Notification
+        function showToast(msg) {
+            const toast = document.createElement('div');
+            toast.className = "fixed top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-xl z-[60] flex items-center gap-2 animate-bounce";
+            toast.innerHTML = `<i data-lucide="check-circle" class="w-4 h-4"></i> <span class="text-xs font-bold">${msg}</span>`;
+            document.body.appendChild(toast);
+            lucide.createIcons();
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
         }
         
         // Loop for timers
