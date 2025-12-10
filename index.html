@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V6 - No Timer</title>
+    <title>Command Center V6.1</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -13,18 +13,14 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; user-select: none; touch-action: manipulation; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
-        .custom-checkbox { appearance: none; background-color: #334155; margin: 0; font: inherit; color: currentColor; width: 1.15em; height: 1.15em; border: 1px solid #475569; border-radius: 0.25em; display: grid; place-content: center; cursor: pointer; transition: all 0.2s; }
-        .custom-checkbox::before { content: ""; width: 0.65em; height: 0.65em; transform: scale(0); transition: 120ms transform ease-in-out; box-shadow: inset 1em 1em white; transform-origin: center; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); }
-        .custom-checkbox:checked { background-color: #2563eb; border-color: #2563eb; }
-        .custom-checkbox:checked::before { transform: scale(1); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #1e293b; } ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        .custom-checkbox { appearance: none; background-color: #334155; width: 1.2em; height: 1.2em; border: 1px solid #475569; border-radius: 0.25em; display: grid; place-content: center; }
+        .custom-checkbox::before { content: ""; width: 0.65em; height: 0.65em; transform: scale(0); box-shadow: inset 1em 1em white; transform-origin: center; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); transition: 120ms transform ease-in-out; }
+        .custom-checkbox:checked { background-color: #2563eb; border-color: #2563eb; }
+        .custom-checkbox:checked::before { transform: scale(1); }
         .view-section { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .input-focus-ring:focus-within { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); }
-        /* Time Input Styling for Task Schedule */
-        input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
     </style>
     <script>
         tailwind.config = { darkMode: 'class', theme: { extend: { colors: { dark: { bg: '#0f172a', card: '#1e293b', input: '#334155', border: '#334155', text: '#f8fafc', subtext: '#94a3b8', } } } } }
@@ -45,7 +41,7 @@
             <form onsubmit="handleLogin(event)" class="space-y-4">
                 <div>
                     <label class="block text-xs font-bold text-dark-subtext uppercase mb-2">Space ID</label>
-                    <input type="text" id="workspace-input" placeholder="例如: 1069" 
+                    <input type="text" id="workspace-input" placeholder="例如: 85" 
                         class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none transition-colors text-center font-mono font-bold">
                 </div>
                 <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
@@ -60,7 +56,6 @@
         
         <!-- Header -->
         <header class="flex flex-col gap-3 bg-dark-card border border-dark-border p-3 rounded-xl shadow-lg relative overflow-hidden">
-            <!-- ID Badge -->
             <button onclick="handleLogout()" class="absolute top-2 right-2 px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext hover:text-white hover:bg-red-900/30 transition-colors flex items-center gap-1 group" title="登出">
                 <span class="font-mono" id="workspace-id-display">...</span>
                 <i data-lucide="log-out" class="w-3 h-3 group-hover:text-red-400"></i>
@@ -83,7 +78,7 @@
                 <div id="popup-warning-icon" class="hidden text-amber-500 animate-pulse mr-12" title="Popups blocked"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
             </div>
 
-            <!-- Button Switcher (Reduced) -->
+            <!-- Button Switcher -->
             <div class="flex bg-dark-bg p-1 rounded-lg border border-dark-border overflow-x-auto no-scrollbar">
                 <button id="btn-view-tracker" class="flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1"><i data-lucide="list-todo" class="w-3 h-3"></i> TASKS</button>
                 <button onclick="openMutualModal()" class="flex-1 ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center justify-center gap-1"><i data-lucide="users" class="w-3 h-3"></i> 互助</button>
@@ -129,9 +124,9 @@
                 <div>
                     <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">URL</label>
                     <div class="flex gap-2">
-                        <input type="text" id="modal-url" placeholder="Paste link here..." class="flex-1 min-w-0 bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors">
-                        <button onclick="document.getElementById('modal-url').value=''" class="bg-red-500/10 border border-red-500/30 text-red-400 hover:text-white hover:bg-red-500 rounded-lg px-3 transition-colors flex items-center justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                        <button type="button" onclick="pasteToUrl()" class="bg-dark-input border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white rounded-lg px-3 transition-colors flex items-center justify-center shadow-sm"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
+                        <input type="text" id="modal-url" onpaste="handlePasteInput(event, this)" placeholder="Paste link here..." class="flex-1 min-w-0 bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors">
+                        <button onclick="document.getElementById('modal-url').value=''" class="bg-red-500/10 border border-red-500/30 text-red-400 hover:text-white hover:bg-red-500 rounded-lg px-3 transition-colors flex items-center justify-center" title="清除"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        <button type="button" onclick="pasteToUrl()" class="bg-dark-input border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white rounded-lg px-3 transition-colors flex items-center justify-center shadow-sm" title="貼上"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
                     </div>
                 </div>
                 <div>
@@ -240,7 +235,7 @@
         function extractUrl(text) { 
             if(!text) return '';
             const m = text.match(/(https?:\/\/[^\s]+)/); 
-            return m ? m[0] : text; 
+            return m ? m[0] : ''; // Return empty string if no URL found
         }
         window.extractUrl = extractUrl;
 
@@ -265,6 +260,34 @@
             if(!win) alert('Pop-up Blocked'); 
         }
         window.openUrl = openUrl;
+
+        // Smart Paste Handler (Intersects paste event)
+        function handlePasteInput(e, inputEl) {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            const clean = extractUrl(text);
+            
+            // Insert cleaned URL or original text if empty (but extraction returns '' so it clears garbage)
+            const valToInsert = clean || ''; 
+            
+            if (document.execCommand && typeof document.execCommand === 'function') {
+               // Try to use execCommand for undo history support if possible, though deprecated
+               // But for controlled inputs, direct value set is often safer for custom logic
+               inputEl.value = valToInsert;
+            } else {
+               inputEl.value = valToInsert;
+            }
+            
+            // Trigger input event manually for frameworks/listeners
+            inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            // If it's a mutual input, trigger update immediately
+            if (inputEl.id.startsWith('mutual-input-')) {
+                const name = inputEl.id.replace('mutual-input-', '');
+                updateMutualUrl(name, valToInsert);
+            }
+        }
+        window.handlePasteInput = handlePasteInput;
 
         // --- 5. DATA OPERATIONS ---
         async function saveTaskToCloud(task) {
@@ -378,7 +401,7 @@
                         <button onclick="if(window.mutualData.users['${n}'].url) openUrl(window.mutualData.users['${n}'].url)" class="${u.url ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-dark-input text-dark-subtext cursor-not-allowed'} px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">前往 <i data-lucide="external-link" class="w-3 h-3"></i></button>
                     </div>
                     <div class="flex gap-2 mb-4 relative z-10">
-                        <div class="relative flex-1"><input type="text" value="${u.url||''}" oninput="updateMutualUrl('${n}', window.extractUrl(this.value))" id="mutual-input-${n}" class="w-full bg-dark-input border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors" placeholder="貼上連結..."></div>
+                        <div class="relative flex-1"><input type="text" value="${u.url||''}" onpaste="handlePasteInput(event, this)" oninput="updateMutualUrl('${n}', window.extractUrl(this.value))" id="mutual-input-${n}" class="w-full bg-dark-input border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors" placeholder="貼上連結..."></div>
                         <div class="flex gap-1">
                             <button onclick="pasteToMutual('mutual-input-${n}', '${n}')" class="bg-dark-input border border-dark-border px-3 rounded-lg text-dark-subtext hover:text-white hover:bg-white/5 transition-colors"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
                             <button onclick="updateMutualUrl('${n}', '')" class="bg-red-500/10 border border-red-500/30 px-3 rounded-lg text-red-400 hover:text-white hover:bg-red-500 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
@@ -446,6 +469,7 @@
                     window.mutualData = docSnap.data();
                     renderMutualList();
                 }
+                // Allow a slight buffer for data to settle, but check share ASAP
                 if (!isMutualLoaded) {
                     isMutualLoaded = true;
                     checkIncomingShare(); 
@@ -463,7 +487,14 @@
             const cleanUrl = extractUrl(pendingShare.url);
             const name = pendingShare.title.trim();
             const mutualNames = window.mutualData.names || [];
-            const matchName = mutualNames.find(n => n.toLowerCase() === name.toLowerCase());
+            
+            // Broad match: If share name contains mutual name (or vice versa), or exact match
+            // Case-insensitive inclusion search
+            const matchName = mutualNames.find(n => {
+                const lowerN = n.toLowerCase();
+                const lowerShare = name.toLowerCase();
+                return lowerShare.includes(lowerN) || lowerN.includes(lowerShare);
+            });
 
             if (matchName) {
                 updateMutualUrl(matchName, cleanUrl);
@@ -585,8 +616,6 @@
         // Start Loop
         setInterval(updateTimerLoop, 1000);
         
-        // Removed Timer Form Logic
-
         initAuth();
     </script>
 </body>
