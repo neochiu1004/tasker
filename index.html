@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V3 - Final</title>
+    <title>Command Center V4 - Robust</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     
-    <!-- Firebase SDK (Modular) -->
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- 1. Firebase Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyA1o7BjEcjZBEyjNKnVi5bknbkkJJSy0DI",
             authDomain: "task-71198.firebaseapp.com",
@@ -31,97 +30,91 @@
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
-        } catch (error) {
-            console.error("Firebase Init Error", error);
-        }
+        } catch (error) { console.error("Firebase Init Error", error); }
 
         const APP_ID_ROOT = 'my-ticket-app'; 
         
-        // State
         let currentUser = null;
         let currentWorkspaceId = localStorage.getItem('cmd_workspace_id') || '';
         let trackerData = [];
         let timerData = [];
-        let unsubTasks = null;
-        let unsubTimers = null;
-        let unsubMutual = null;
-        
-        // Flag to ensure we don't process shortcuts before data is loaded
         let isMutualLoaded = false;
 
-        // --- NEW: Check for Auto-Login via URL Params ---
+        // Default structure to prevent crashes
+        window.mutualData = { target: 3, names: [], users: {} };
+
+        // --- Auto-Login Check ---
         const urlParams = new URLSearchParams(window.location.search);
         const urlSpaceId = urlParams.get('space_id');
         if (urlSpaceId) {
-            console.log("Auto-login via URL:", urlSpaceId);
             currentWorkspaceId = urlSpaceId;
             localStorage.setItem('cmd_workspace_id', urlSpaceId);
         }
 
-        // --- 2. Auth & Login Logic ---
-        const initAuth = async () => {
-            try {
-                await signInAnonymously(auth);
-            } catch (error) {
-                console.error("Auth Error", error);
-                alert("無法連接至資料庫，請檢查網路或是 Firebase 設定限制。");
-            }
-        };
+        // --- Auth & Init ---
+        const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) { alert("連線錯誤: " + e.message); } };
 
-        // UI Helpers for Login
-        window.handleLogin = (e) => {
+        const handleLogin = (e) => {
             e.preventDefault();
             const inputId = document.getElementById('workspace-input').value.trim();
             if (!inputId) return alert("請輸入空間代碼");
-            
             currentWorkspaceId = inputId;
             localStorage.setItem('cmd_workspace_id', inputId);
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('main-app').classList.remove('hidden');
-            
-            // Trigger data load
+            switchLoginState(true);
             initFirestoreListeners();
         };
+        window.handleLogin = handleLogin;
 
-        window.handleLogout = () => {
-            if(confirm('確定要登出此空間嗎？')) {
+        const handleLogout = () => {
+            if(confirm('確定要登出嗎？')) {
                 localStorage.removeItem('cmd_workspace_id');
-                // Remove param from URL to prevent auto-relogin
                 const url = new URL(window.location);
                 url.searchParams.delete('space_id');
                 window.history.pushState({}, '', url);
                 window.location.reload();
             }
         };
+        window.handleLogout = handleLogout;
+
+        const switchLoginState = (isLoggedIn) => {
+            if (isLoggedIn) {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('main-app').classList.remove('hidden');
+                document.getElementById('fab-new-task').classList.remove('hidden'); // Ensure FAB shows
+            } else {
+                document.getElementById('login-screen').classList.remove('hidden');
+                document.getElementById('main-app').classList.add('hidden');
+                document.getElementById('fab-new-task').classList.add('hidden');
+            }
+        };
 
         onAuthStateChanged(auth, (user) => {
             currentUser = user;
-            if (user) {
-                console.log("Connected as", user.uid);
-                // If we have a workspace ID, load data immediately
-                if (currentWorkspaceId) {
-                    document.getElementById('login-screen').classList.add('hidden');
-                    document.getElementById('main-app').classList.remove('hidden');
-                    initFirestoreListeners();
-                    document.getElementById('workspace-id-display').textContent = currentWorkspaceId;
-                } else {
-                    document.getElementById('login-screen').classList.remove('hidden');
-                    document.getElementById('main-app').classList.add('hidden');
-                }
+            if (user && currentWorkspaceId) {
+                switchLoginState(true);
+                initFirestoreListeners();
+                document.getElementById('workspace-id-display').textContent = currentWorkspaceId;
+                
+                // Safety Timeout: If firestore is slow, process URL anyway after 2s
+                setTimeout(() => {
+                    if (!isMutualLoaded) {
+                        console.warn("Mutual data slow, forcing check...");
+                        isMutualLoaded = true; // Force true to unblock
+                        checkIncomingShare();
+                    }
+                }, 2000);
+            } else if (user) {
+                switchLoginState(false);
             }
         });
 
-        // --- 3. Firestore Paths & Listeners ---
+        // --- Firestore ---
         function getCollections() {
             if (!currentWorkspaceId) return null;
-            const taskColName = `${currentWorkspaceId}_cmd_tasks`;
-            const timerColName = `${currentWorkspaceId}_cmd_timers`;
-            const mutualColName = `${currentWorkspaceId}_mutual`;
-            
             return {
-                tasks: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', taskColName),
-                timers: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', timerColName),
-                mutualDoc: doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', mutualColName, 'config')
+                tasks: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_tasks`),
+                timers: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_timers`),
+                mutualDoc: doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_mutual`, 'config')
             };
         }
 
@@ -129,193 +122,99 @@
             const cols = getCollections();
             if (!cols) return;
 
-            if (unsubTasks) unsubTasks();
-            unsubTasks = onSnapshot(query(cols.tasks, orderBy('createdAt', 'desc')), (snapshot) => {
+            onSnapshot(query(cols.tasks, orderBy('createdAt', 'desc')), (snapshot) => {
                 trackerData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                 renderTracker();
             });
 
-            if (unsubTimers) unsubTimers();
-            unsubTimers = onSnapshot(cols.timers, (snapshot) => {
-                timerData = snapshot.docs.map(d => ({ 
-                    id: d.id, 
-                    ...d.data(),
-                    endTime: d.data().endTime ? d.data().endTime.toDate() : new Date() 
-                }));
-                window.updateTimerLoop(); 
+            onSnapshot(cols.timers, (snapshot) => {
+                timerData = snapshot.docs.map(d => ({ id: d.id, ...d.data(), endTime: d.data().endTime ? d.data().endTime.toDate() : new Date() }));
+                updateTimerLoop(); 
             });
 
-            if (unsubMutual) unsubMutual();
-            unsubMutual = onSnapshot(cols.mutualDoc, (docSnap) => {
+            onSnapshot(cols.mutualDoc, (docSnap) => {
                 if (docSnap.exists()) {
                     window.mutualData = docSnap.data();
-                    window.renderMutualList();
+                    renderMutualList();
                 }
-                
-                // Data loaded signal
                 if (!isMutualLoaded) {
                     isMutualLoaded = true;
-                    // Check for pending shares only after we know the mutual list names
-                    checkIncomingShare(); 
+                    checkIncomingShare(); // Data ready, check share
                 }
             });
-            
-            document.getElementById('workspace-id-display').textContent = currentWorkspaceId;
         }
 
-        // --- 4. CRUD Operations ---
-        
-        window.saveTaskToCloud = async (task) => {
+        // --- Data Operations ---
+        const saveTaskToCloud = async (task) => {
             if (!currentUser || !currentWorkspaceId) return;
             const cols = getCollections();
-            await addDoc(cols.tasks, {
-                ...task,
-                createdAt: Date.now(),
-                executed: false,
-                clicks: 0
-            });
+            await addDoc(cols.tasks, { ...task, createdAt: Date.now(), executed: false, clicks: 0 });
         };
+        window.saveTaskToCloud = saveTaskToCloud;
 
-        window.updateTaskInCloud = async (id, data) => {
+        const updateTaskInCloud = async (id, data) => {
             if (!currentUser || !currentWorkspaceId) return;
-            const taskColName = `${currentWorkspaceId}_cmd_tasks`;
-            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', taskColName, id);
+            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_tasks`, id);
             await updateDoc(docRef, data);
         };
+        window.updateTaskInCloud = updateTaskInCloud;
 
-        window.deleteTaskFromCloud = async (id) => {
+        const deleteTaskFromCloud = async (id) => {
             if (!currentUser || !currentWorkspaceId) return;
-            const taskColName = `${currentWorkspaceId}_cmd_tasks`;
-            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', taskColName, id);
+            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_tasks`, id);
             await deleteDoc(docRef);
         };
+        window.deleteTaskFromCloud = deleteTaskFromCloud;
 
-        window.saveTimerToCloud = async (timer) => {
+        const saveTimerToCloud = async (timer) => {
             if (!currentUser || !currentWorkspaceId) return;
             const cols = getCollections();
-            await addDoc(cols.timers, {
-                ...timer,
-                endTime: timer.endTime,
-                createdAt: Date.now()
-            });
+            await addDoc(cols.timers, { ...timer, endTime: timer.endTime, createdAt: Date.now() });
         };
+        window.saveTimerToCloud = saveTimerToCloud;
 
-        window.deleteTimerFromCloud = async (id) => {
+        const deleteTimerFromCloud = async (id) => {
             if (!currentUser || !currentWorkspaceId) return;
-            const timerColName = `${currentWorkspaceId}_cmd_timers`;
-            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', timerColName, id);
+            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_timers`, id);
             await deleteDoc(docRef);
         };
+        window.deleteTimerFromCloud = deleteTimerFromCloud;
 
-        window.saveMutualToCloud = async (data) => {
+        const saveMutualToCloud = async (data) => {
              if (!currentUser || !currentWorkspaceId) return;
              const cols = getCollections();
              await setDoc(cols.mutualDoc, data, { merge: true });
         };
+        window.saveMutualToCloud = saveMutualToCloud;
         
-        window.getTrackerData = () => trackerData;
-        window.getTimerData = () => timerData;
+        const getTrackerData = () => trackerData;
+        window.getTrackerData = getTrackerData;
+        
+        const getTimerData = () => timerData;
+        window.getTimerData = getTimerData;
 
         initAuth();
-
     </script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0f172a; 
-            color: #e2e8f0;
-            user-select: none;
-            touch-action: manipulation; 
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; user-select: none; touch-action: manipulation; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
-        
-        input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        
-        /* Time Input Styling */
-        input[type="time"]::-webkit-calendar-picker-indicator {
-            filter: invert(1);
-            cursor: pointer;
-        }
-
-        /* Checkbox Styling */
-        .custom-checkbox {
-            appearance: none;
-            background-color: #334155;
-            margin: 0;
-            font: inherit;
-            color: currentColor;
-            width: 1.15em;
-            height: 1.15em;
-            border: 1px solid #475569;
-            border-radius: 0.25em;
-            display: grid;
-            place-content: center;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .custom-checkbox::before {
-            content: "";
-            width: 0.65em;
-            height: 0.65em;
-            transform: scale(0);
-            transition: 120ms transform ease-in-out;
-            box-shadow: inset 1em 1em white;
-            transform-origin: center;
-            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
-        }
-
-        .custom-checkbox:checked {
-            background-color: #2563eb;
-            border-color: #2563eb;
-        }
-
-        .custom-checkbox:checked::before {
-            transform: scale(1);
-        }
-
-        /* Hide Scrollbar for Horizontal Scroll areas */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #1e293b; }
-        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-        
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        .custom-checkbox { appearance: none; background-color: #334155; margin: 0; font: inherit; color: currentColor; width: 1.15em; height: 1.15em; border: 1px solid #475569; border-radius: 0.25em; display: grid; place-content: center; cursor: pointer; transition: all 0.2s; }
+        .custom-checkbox::before { content: ""; width: 0.65em; height: 0.65em; transform: scale(0); transition: 120ms transform ease-in-out; box-shadow: inset 1em 1em white; transform-origin: center; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); }
+        .custom-checkbox:checked { background-color: #2563eb; border-color: #2563eb; }
+        .custom-checkbox:checked::before { transform: scale(1); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #1e293b; } ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
         .view-section { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(5px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .input-focus-ring:focus-within {
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
-        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .input-focus-ring:focus-within { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); }
     </style>
     <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        dark: {
-                            bg: '#0f172a', card: '#1e293b', input: '#334155',
-                            border: '#334155', text: '#f8fafc', subtext: '#94a3b8',
-                        }
-                    }
-                }
-            }
-        }
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { dark: { bg: '#0f172a', card: '#1e293b', input: '#334155', border: '#334155', text: '#f8fafc', subtext: '#94a3b8', } } } } }
     </script>
 </head>
 <body class="min-h-screen flex flex-col items-center">
@@ -333,16 +232,13 @@
             <form onsubmit="handleLogin(event)" class="space-y-4">
                 <div>
                     <label class="block text-xs font-bold text-dark-subtext uppercase mb-2">Space ID</label>
-                    <input type="text" id="workspace-input" placeholder="例如: my-space-01" 
+                    <input type="text" id="workspace-input" placeholder="例如: 1069" 
                         class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none transition-colors text-center font-mono font-bold">
                 </div>
                 <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
                     進入系統 <i data-lucide="arrow-right" class="w-4 h-4"></i>
                 </button>
             </form>
-            <p class="mt-6 text-center text-[10px] text-dark-subtext opacity-50">
-                Connected to Project: task-71198
-            </p>
         </div>
     </div>
 
@@ -363,9 +259,7 @@
                         <i data-lucide="command" class="w-5 h-5"></i>
                     </div>
                     <div>
-                        <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">
-                            COMMAND CTR
-                        </h1>
+                        <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">COMMAND CTR</h1>
                         <div class="flex items-center gap-2 text-[10px] text-dark-subtext font-mono">
                             <span id="header-time-text" class="text-emerald-400 font-bold">--:--:--</span>
                             <span>•</span>
@@ -373,185 +267,94 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Warning for Popups (Small icon) -->
-                <div id="popup-warning-icon" class="hidden text-amber-500 animate-pulse mr-12" title="Popups blocked">
-                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
-                </div>
+                <div id="popup-warning-icon" class="hidden text-amber-500 animate-pulse mr-12" title="Popups blocked"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
             </div>
 
             <!-- Button Switcher -->
             <div class="flex bg-dark-bg p-1 rounded-lg border border-dark-border overflow-x-auto no-scrollbar">
-                <button id="btn-view-tracker" onclick="switchView('tracker')" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0">
-                    <i data-lucide="list-todo" class="w-3 h-3"></i> TASKS
-                </button>
-                <button id="btn-view-timer" onclick="switchView('timer')" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0">
-                    <i data-lucide="timer" class="w-3 h-3"></i> TIMER
-                </button>
-                <!-- Mutual Mode Button -->
-                <button onclick="openMutualModal()" class="ml-auto px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center gap-1 shrink-0">
-                    <i data-lucide="users" class="w-3 h-3"></i> 互助
-                </button>
+                <button id="btn-view-tracker" onclick="switchView('tracker')" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0"><i data-lucide="list-todo" class="w-3 h-3"></i> TASKS</button>
+                <button id="btn-view-timer" onclick="switchView('timer')" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0"><i data-lucide="timer" class="w-3 h-3"></i> TIMER</button>
+                <button onclick="openMutualModal()" class="ml-auto px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center gap-1 shrink-0"><i data-lucide="users" class="w-3 h-3"></i> 互助</button>
             </div>
         </header>
 
-        <!-- ==================== TRACKER VIEW (Default) ==================== -->
+        <!-- ==================== TRACKER VIEW ==================== -->
         <div id="view-tracker" class="view-section space-y-6">
             <div class="flex justify-between items-end">
                 <h2 class="text-sm font-bold text-dark-subtext tracking-wider uppercase whitespace-nowrap mr-2">Cloud Routine</h2>
-                
-                <!-- Buttons Toolbar -->
                 <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar justify-end w-full">
-                    
-                    <!-- Select All -->
-                    <button onclick="toggleSelectAll()" id="btn-select-all" class="text-xs bg-dark-card border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0">
-                        <i data-lucide="check-square" class="w-3 h-3"></i> ALL
-                    </button>
-                    
-                    <!-- Delete Selected (Hidden by default) -->
-                    <button onclick="deleteSelectedTasks()" id="btn-delete-selected" class="hidden text-xs bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-500 px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0">
-                        <i data-lucide="trash-2" class="w-3 h-3"></i> DEL
-                    </button>
+                    <button onclick="toggleSelectAll()" id="btn-select-all" class="text-xs bg-dark-card border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0"><i data-lucide="check-square" class="w-3 h-3"></i> ALL</button>
+                    <button onclick="deleteSelectedTasks()" id="btn-delete-selected" class="hidden text-xs bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-500 px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0"><i data-lucide="trash-2" class="w-3 h-3"></i> DEL</button>
                 </div>
             </div>
             
-            <!-- Warning for Popups -->
             <div id="popup-warning" class="hidden bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex items-start gap-3">
                 <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0"></i>
                 <div class="text-xs text-amber-200">
                     <strong class="block mb-1 text-amber-400">Pop-up Blocked</strong>
-                    Your browser blocked the auto-open. Please allow pop-ups for this site in your browser settings.
+                    Please allow pop-ups for this site in your browser settings.
                     <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="block mt-2 underline text-amber-400/70 hover:text-amber-400">Dismiss</button>
                 </div>
             </div>
 
             <div id="tracker-list" class="space-y-3 pb-8"></div>
             <div id="tracker-empty" class="hidden py-12 text-center opacity-40 select-none">
-                <div class="relative w-12 h-12 mx-auto mb-3">
-                    <i data-lucide="cloud" class="w-12 h-12 text-dark-subtext opacity-50 absolute"></i>
-                    <i data-lucide="activity" class="w-6 h-6 text-blue-500 absolute top-3 left-3 animate-pulse"></i>
-                </div>
-                <p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">Waiting for Cloud Data...</p>
+                <i data-lucide="cloud" class="w-12 h-12 mx-auto mb-3 text-dark-subtext opacity-50 block"></i>
+                <p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">Waiting for Data...</p>
             </div>
         </div>
 
         <!-- ==================== TIMER VIEW ==================== -->
         <div id="view-timer" class="view-section hidden space-y-5">
-            <!-- Stats Bar -->
             <div class="grid grid-cols-2 gap-4 text-xs font-mono">
                 <div>
-                    <div class="flex justify-between mb-1 text-dark-subtext">
-                        <span>SYSTEM TIME</span>
-                        <span id="seconds-text" class="text-blue-400">00</span>
-                    </div>
-                    <div class="h-1.5 w-full bg-dark-border rounded-full overflow-hidden">
-                        <div id="seconds-bar" class="h-full bg-blue-500/80 w-0 transition-all duration-1000"></div>
-                    </div>
+                    <div class="flex justify-between mb-1 text-dark-subtext"><span>SYSTEM TIME</span><span id="seconds-text" class="text-blue-400">00</span></div>
+                    <div class="h-1.5 w-full bg-dark-border rounded-full overflow-hidden"><div id="seconds-bar" class="h-full bg-blue-500/80 w-0 transition-all duration-1000"></div></div>
                 </div>
                 <div>
-                    <div class="flex justify-between mb-1 text-dark-subtext">
-                        <span>ACTIVE TASKS</span>
-                        <span id="active-count" class="text-white">0</span>
-                    </div>
-                    <div class="h-1.5 w-full bg-dark-border rounded-full overflow-hidden">
-                        <div id="tasks-bar" class="h-full bg-emerald-500/80 w-0 transition-all duration-500"></div>
-                    </div>
+                    <div class="flex justify-between mb-1 text-dark-subtext"><span>ACTIVE TASKS</span><span id="active-count" class="text-white">0</span></div>
+                    <div class="h-1.5 w-full bg-dark-border rounded-full overflow-hidden"><div id="tasks-bar" class="h-full bg-emerald-500/80 w-0 transition-all duration-500"></div></div>
                 </div>
             </div>
-
-            <!-- Global Delay Config -->
             <div class="bg-dark-card border border-dark-border rounded-lg p-3 flex justify-between items-center shadow-sm">
-                <div class="flex items-center gap-2 text-amber-400">
-                    <i data-lucide="hourglass" class="w-4 h-4"></i>
-                    <span class="text-xs font-bold uppercase tracking-wider text-dark-subtext">Delay Buffer</span>
-                </div>
-                <div class="flex items-center bg-dark-bg border border-dark-border rounded px-2 py-1 gap-2 focus-within:border-amber-400 transition-colors">
-                    <input type="number" id="global-delay" value="0" min="0" inputmode="numeric" 
-                        class="bg-transparent text-right font-mono text-sm font-bold text-white w-12 outline-none" placeholder="0">
-                    <span class="text-[10px] font-bold text-dark-subtext">MIN</span>
-                </div>
+                <div class="flex items-center gap-2 text-amber-400"><i data-lucide="hourglass" class="w-4 h-4"></i><span class="text-xs font-bold uppercase tracking-wider text-dark-subtext">Delay Buffer</span></div>
+                <div class="flex items-center bg-dark-bg border border-dark-border rounded px-2 py-1 gap-2 focus-within:border-amber-400 transition-colors"><input type="number" id="global-delay" value="0" min="0" inputmode="numeric" class="bg-transparent text-right font-mono text-sm font-bold text-white w-12 outline-none" placeholder="0"><span class="text-[10px] font-bold text-dark-subtext">MIN</span></div>
             </div>
-
-            <!-- Timer Input Form -->
             <form id="timer-form" class="space-y-3">
-                <div class="relative group">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <i data-lucide="plus" class="h-4 w-4 text-dark-subtext group-focus-within:text-blue-400"></i>
-                    </div>
-                    <input type="text" id="t-label" placeholder="New timer name..." autocomplete="off"
-                        class="block w-full pl-10 pr-4 py-3 bg-dark-card border border-dark-border rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white transition-all shadow-sm">
-                </div>
-                
+                <div class="relative group"><div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i data-lucide="plus" class="h-4 w-4 text-dark-subtext group-focus-within:text-blue-400"></i></div><input type="text" id="t-label" placeholder="New timer name..." autocomplete="off" class="block w-full pl-10 pr-4 py-3 bg-dark-card border border-dark-border rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white transition-all shadow-sm"></div>
                 <div class="grid grid-cols-4 gap-2">
-                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors">
-                        <label class="text-[9px] text-dark-subtext font-bold block mb-1">HR</label>
-                        <input type="number" id="t-h" placeholder="0" min="0" inputmode="numeric" pattern="[0-9]*" 
-                            class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700">
-                    </div>
-                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors">
-                        <label class="text-[9px] text-dark-subtext font-bold block mb-1">MIN</label>
-                        <input type="number" id="t-m" placeholder="0" min="0" max="59" inputmode="numeric" pattern="[0-9]*" 
-                            class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700">
-                    </div>
-                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors">
-                        <label class="text-[9px] text-dark-subtext font-bold block mb-1">SEC</label>
-                        <input type="number" id="t-s" placeholder="0" min="0" max="59" inputmode="numeric" pattern="[0-9]*" 
-                            class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700">
-                    </div>
-                    <button type="submit" id="t-submit" class="bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center transition-all shadow-lg shadow-blue-900/30 active:scale-95">
-                        <i data-lucide="play" class="w-6 h-6 fill-current"></i>
-                    </button>
+                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors"><label class="text-[9px] text-dark-subtext font-bold block mb-1">HR</label><input type="number" id="t-h" placeholder="0" min="0" inputmode="numeric" class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700"></div>
+                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors"><label class="text-[9px] text-dark-subtext font-bold block mb-1">MIN</label><input type="number" id="t-m" placeholder="0" min="0" max="59" inputmode="numeric" class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700"></div>
+                    <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center input-focus-ring transition-colors"><label class="text-[9px] text-dark-subtext font-bold block mb-1">SEC</label><input type="number" id="t-s" placeholder="0" min="0" max="59" inputmode="numeric" class="w-full bg-transparent text-center font-mono text-xl font-bold outline-none text-white placeholder-slate-700"></div>
+                    <button type="submit" id="t-submit" class="bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center justify-center transition-all shadow-lg shadow-blue-900/30 active:scale-95"><i data-lucide="play" class="w-6 h-6 fill-current"></i></button>
                 </div>
             </form>
-
             <div class="border-t border-dark-border/50"></div>
             <div id="timers-container" class="space-y-4 pb-12"></div>
-            
-            <div id="timer-empty" class="hidden py-12 text-center opacity-40 select-none">
-                <i data-lucide="clock" class="w-12 h-12 mx-auto mb-3 text-dark-subtext"></i>
-                <p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">No Active Timers</p>
-            </div>
+            <div id="timer-empty" class="hidden py-12 text-center opacity-40 select-none"><i data-lucide="clock" class="w-12 h-12 mx-auto mb-3 text-dark-subtext"></i><p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">No Active Timers</p></div>
         </div>
-
     </div>
 
     <!-- FAB -->
-    <button id="fab-new-task" onclick="openTrackerModal()" 
-        class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group">
-        <i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i>
-    </button>
+    <button id="fab-new-task" onclick="openTrackerModal()" class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group hidden"><i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i></button>
 
     <!-- Tracker Modal -->
     <div id="tracker-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity">
         <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
-            <h3 id="modal-title" class="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i>
-                <span>Edit Task</span>
-            </h3>
+            <h3 id="modal-title" class="text-lg font-bold text-white mb-6 flex items-center gap-2"><i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>Edit Task</span></h3>
             <div class="space-y-4">
-                <div>
-                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">Title</label>
-                    <input type="text" id="modal-name" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none transition-colors">
-                </div>
+                <div><label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">Title</label><input type="text" id="modal-name" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none transition-colors"></div>
                 <div>
                     <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">URL</label>
                     <div class="flex gap-2">
                         <input type="text" id="modal-url" placeholder="Paste link here..." class="flex-1 min-w-0 bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors">
-                        <button type="button" onclick="pasteToUrl()" class="bg-dark-input border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white rounded-lg px-3 transition-colors flex items-center justify-center shadow-sm">
-                            <i data-lucide="clipboard-paste" class="w-4 h-4"></i>
-                        </button>
+                        <button onclick="document.getElementById('modal-url').value=''" class="bg-red-500/10 border border-red-500/30 text-red-400 hover:text-white hover:bg-red-500 rounded-lg px-3 transition-colors flex items-center justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        <button type="button" onclick="pasteToUrl()" class="bg-dark-input border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white rounded-lg px-3 transition-colors flex items-center justify-center shadow-sm"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
                     </div>
                 </div>
                 <div>
-                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 flex items-center gap-2">
-                        <span>Auto Open At (24h)</span>
-                    </label>
-                    <div class="relative">
-                        <input type="time" id="modal-schedule" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors">
-                        <div class="absolute right-3 top-2 pointer-events-none text-dark-subtext">
-                            <i data-lucide="clock" class="w-4 h-4"></i>
-                        </div>
-                    </div>
+                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 flex items-center gap-2"><span>Auto Open At (24h)</span></label>
+                    <div class="relative"><input type="time" id="modal-schedule" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors"><div class="absolute right-3 top-2 pointer-events-none text-dark-subtext"><i data-lucide="clock" class="w-4 h-4"></i></div></div>
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-3 mt-6">
@@ -561,96 +364,36 @@
         </div>
     </div>
 
-    <!-- Reset Menu Modal -->
-    <div id="reset-menu-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity">
-        <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
-            <h3 class="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <i data-lucide="rotate-ccw" class="w-5 h-5 text-orange-400"></i>
-                <span>重置選項</span>
-            </h3>
-            <div class="space-y-3">
-                <button onclick="resetRound()" class="w-full py-3 bg-red-900/20 border border-red-500/30 hover:bg-red-900/40 text-red-400 font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
-                    <i data-lucide="trash-2" class="w-4 h-4"></i> 全部重置 (清空歷史)
-                </button>
-                <button onclick="closeResetMenu()" class="w-full py-3 text-dark-subtext hover:text-white font-bold rounded-lg transition-colors">
-                    取消
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Mutual Sign-in Modal (Cloud V3) -->
+    <!-- Mutual Modal -->
     <div id="mutual-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity overflow-y-auto">
         <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-lg p-6 relative max-h-[90vh] flex flex-col">
-            
-            <!-- Mutual Header -->
             <div class="flex justify-between items-start mb-4 shrink-0">
-                <div>
-                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i data-lucide="users" class="w-5 h-5 text-purple-400"></i>
-                        <span>互助簽到 (Cloud)</span>
-                    </h3>
-                    <p class="text-xs text-dark-subtext mt-1">資料已同步至雲端，全員可見</p>
-                </div>
+                <div><h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-purple-400"></i><span>互助簽到 (Cloud)</span></h3><p class="text-xs text-dark-subtext mt-1">資料已同步至雲端，全員可見</p></div>
                 <div class="flex gap-2">
-                     <button onclick="toggleMutualSettings()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10" title="設定名單與目標">
-                        <i data-lucide="settings" class="w-5 h-5"></i>
-                    </button>
-                    <button onclick="showResetMenu()" class="text-dark-subtext hover:text-orange-400 p-1 rounded hover:bg-white/10" title="重置選單">
-                        <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
-                    </button>
-                    <button onclick="closeMutualModal()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10">
-                        <i data-lucide="x" class="w-5 h-5"></i>
-                    </button>
+                     <button onclick="toggleMutualSettings()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10"><i data-lucide="settings" class="w-5 h-5"></i></button>
+                     <button onclick="resetRound()" class="text-dark-subtext hover:text-orange-400 p-1 rounded hover:bg-white/10" title="清空全部"><i data-lucide="rotate-ccw" class="w-5 h-5"></i></button>
+                     <button onclick="closeMutualModal()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10"><i data-lucide="x" class="w-5 h-5"></i></button>
                 </div>
             </div>
-
-            <!-- Settings View (Hidden by default) -->
             <div id="mutual-settings" class="hidden flex-1 flex flex-col mb-4 overflow-y-auto no-scrollbar">
                 <div class="bg-dark-card border border-dark-border rounded-lg p-4 flex-1 space-y-4">
-                    <div>
-                        <label class="text-xs font-bold text-white uppercase mb-2 block flex justify-between">
-                            <span>目標次數 (Target)</span>
-                            <span class="text-emerald-400 font-mono" id="target-display">3</span>
-                        </label>
-                        <input type="number" id="mutual-target-input" value="3" min="1" class="w-full bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none transition-colors">
-                        <p class="text-[10px] text-dark-subtext mt-1">當累積幫助人數達到此數字，顯示「本輪完成」。</p>
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-white uppercase mb-2 block">編輯名單 (一行一個名字)</label>
-                        <textarea id="mutual-names-input" class="w-full h-32 bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none resize-none" placeholder="A&#10;B&#10;C&#10;D&#10;E"></textarea>
-                    </div>
+                    <div><label class="text-xs font-bold text-white uppercase mb-2 block flex justify-between"><span>目標次數</span><span class="text-emerald-400 font-mono" id="target-display">3</span></label><input type="number" id="mutual-target-input" value="3" min="1" class="w-full bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none transition-colors"></div>
+                    <div><label class="text-xs font-bold text-white uppercase mb-2 block">編輯名單</label><textarea id="mutual-names-input" class="w-full h-32 bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none resize-none" placeholder="Name 1&#10;Name 2"></textarea></div>
                     <button onclick="saveMutualConfig()" class="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg transition-colors shadow-lg">儲存設定</button>
                 </div>
             </div>
-
-            <!-- Quick Helper Selector (One Click Mark) -->
-            <div id="mutual-quick-helper" class="mb-4 bg-dark-input/50 rounded-lg p-3 border border-dark-border shrink-0">
-                <p class="text-[10px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-1">
-                    <i data-lucide="zap" class="w-3 h-3"></i>
-                    今日值日生 (一鍵標記所有人)
-                </p>
-                <div id="mutual-helper-buttons" class="flex flex-wrap gap-2">
-                    <!-- Buttons injected by JS -->
-                </div>
-            </div>
-
-            <!-- List View -->
-            <div id="mutual-list" class="space-y-4 overflow-y-auto no-scrollbar flex-1 pr-1 pb-2">
-                <!-- Cards will be injected here -->
-            </div>
-            
+            <div id="mutual-quick-helper" class="mb-4 bg-dark-input/50 rounded-lg p-3 border border-dark-border shrink-0"><p class="text-[10px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-1"><i data-lucide="zap" class="w-3 h-3"></i> 今日值日生 (一鍵標記所有人)</p><div id="mutual-helper-buttons" class="flex flex-wrap gap-2"></div></div>
+            <div id="mutual-list" class="space-y-4 overflow-y-auto no-scrollbar flex-1 pr-1 pb-2"></div>
         </div>
     </div>
 
     <script>
         // --- Utilities ---
-        const pad = (num) => String(num).padStart(2, '0');
+        const pad = (n) => String(n).padStart(2, '0');
         const formatTime = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
         const formatTimeWithSeconds = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
         const getTaipeiDate = () => new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
-        // --- DOM Elements ---
         const viewTimer = document.getElementById('view-timer');
         const viewTracker = document.getElementById('view-tracker');
         const headerTime = document.getElementById('header-time-text');
@@ -660,367 +403,293 @@
         const popupWarning = document.getElementById('popup-warning');
         const popupWarningIcon = document.getElementById('popup-warning-icon');
         const fabButton = document.getElementById('fab-new-task'); 
-
+        
         // Inputs
-        const inputH = document.getElementById('t-h');
-        const inputM = document.getElementById('t-m');
-        const inputS = document.getElementById('t-s');
-        const btnSubmit = document.getElementById('t-submit');
-        const globalDelayInput = document.getElementById('global-delay');
+        const inputH = document.getElementById('t-h'), inputM = document.getElementById('t-m'), inputS = document.getElementById('t-s');
+        const btnSubmit = document.getElementById('t-submit'), globalDelayInput = document.getElementById('global-delay');
 
-        // --- Init Delay Buffer ---
         const savedDelay = localStorage.getItem('dashboard-global-delay');
-        if (savedDelay) {
-            globalDelayInput.value = savedDelay;
-        }
-        globalDelayInput.addEventListener('input', (e) => {
-            localStorage.setItem('dashboard-global-delay', e.target.value);
-        });
+        if (savedDelay) globalDelayInput.value = savedDelay;
+        globalDelayInput.addEventListener('input', (e) => localStorage.setItem('dashboard-global-delay', e.target.value));
 
-        // --- View Switcher Logic ---
-        window.switchView = (viewName) => {
+        const switchView = (viewName) => {
             if (viewName === 'timer') {
-                viewTimer.classList.remove('hidden');
-                viewTracker.classList.add('hidden');
-                fabButton.classList.add('hidden');
-                
+                viewTimer.classList.remove('hidden'); viewTracker.classList.add('hidden');
                 btnTimer.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0";
                 btnTracker.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0";
             } else {
-                viewTimer.classList.add('hidden');
-                viewTracker.classList.remove('hidden');
-                viewTracker.classList.add('view-section'); 
-                fabButton.classList.remove('hidden');
-
+                viewTimer.classList.add('hidden'); viewTracker.classList.remove('hidden'); viewTracker.classList.add('view-section'); 
                 btnTracker.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0";
                 btnTimer.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0";
             }
         };
+        window.switchView = switchView;
 
-        // --- Auto-Jump Input Logic ---
         const focusNext = (currentId) => {
-            if (currentId === 't-h') inputM.focus();
-            else if (currentId === 't-m') inputS.focus();
-            else if (currentId === 't-s') btnSubmit.focus();
+            if (currentId === 't-h') inputM.focus(); else if (currentId === 't-m') inputS.focus(); else if (currentId === 't-s') btnSubmit.focus();
         };
-
         [inputH, inputM, inputS].forEach(input => {
             input.addEventListener('focus', function() { this.select(); });
-            input.addEventListener('input', function() {
-                const val = this.value;
-                if (this.id !== 't-h' && val.length >= 2) focusNext(this.id);
-            });
-            input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (this.id === 't-s' || (this.value && this.id !== 't-s')) {
-                         if (this.id === 't-s') document.getElementById('timer-form').requestSubmit();
-                         else focusNext(this.id);
-                    }
-                }
-            });
+            input.addEventListener('input', function() { if (this.id !== 't-h' && this.value.length >= 2) focusNext(this.id); });
+            input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); if (this.id === 't-s' || (this.value && this.id !== 't-s')) { if (this.id === 't-s') document.getElementById('timer-form').requestSubmit(); else focusNext(this.id); } } });
         });
 
-        // =======================
-        // PASTE LOGIC (SMART EXTRACT)
-        // =======================
-        window.pasteToMutual = async (inputId, name) => {
+        // --- Logic ---
+        const extractUrl = (text) => { const m = text.match(/(https?:\/\/[^\s]+)/); return m ? m[0] : text; };
+
+        const pasteToMutual = async (inputId, name) => {
             try {
                 const text = await navigator.clipboard.readText();
-                
-                // Extract URL using regex
-                const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
-                const cleanUrl = urlMatch ? urlMatch[0] : text;
-
-                const input = document.getElementById(inputId);
-                input.value = cleanUrl;
+                const cleanUrl = extractUrl(text);
+                document.getElementById(inputId).value = cleanUrl;
                 updateMutualUrl(name, cleanUrl);
-                
-            } catch (err) {
-                 alert('請手動貼上');
-            }
-        }
+            } catch (err) { alert('請手動貼上'); }
+        };
+        window.pasteToMutual = pasteToMutual;
 
-        window.pasteToUrl = async () => {
+        const pasteToUrl = async () => {
             try {
                 const text = await navigator.clipboard.readText();
-                
-                const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
-                const cleanUrl = urlMatch ? urlMatch[0] : text;
-
-                const urlInput = document.getElementById('modal-url');
-                urlInput.value = cleanUrl;
-                urlInput.focus();
-                
-                urlInput.classList.add('border-green-500');
-                setTimeout(() => urlInput.classList.remove('border-green-500'), 500);
-            } catch (err) {
-                const urlInput = document.getElementById('modal-url');
-                urlInput.focus();
-                alert('瀏覽器安全性限制：請點擊輸入框並按下 Ctrl+V 貼上');
-            }
+                const cleanUrl = extractUrl(text);
+                const el = document.getElementById('modal-url'); el.value = cleanUrl; el.focus();
+                el.classList.add('border-green-500'); setTimeout(() => el.classList.remove('border-green-500'), 500);
+            } catch (err) { alert('請手動貼上'); }
         };
+        window.pasteToUrl = pasteToUrl;
 
-        // =======================
-        // MUTUAL RELAY LOGIC (CLOUD V3)
-        // =======================
-        const mutualModalEl = document.getElementById('mutual-modal');
-        const mutualListEl = document.getElementById('mutual-list');
-        const mutualSettingsEl = document.getElementById('mutual-settings');
-        const mutualNamesInput = document.getElementById('mutual-names-input');
-        const mutualTargetInput = document.getElementById('mutual-target-input');
-        const mutualHelperButtonsEl = document.getElementById('mutual-helper-buttons');
-        const mutualQuickHelperEl = document.getElementById('mutual-quick-helper');
-        const resetMenuModalEl = document.getElementById('reset-menu-modal');
+        // Mutual Logic
+        const mutualModalEl = document.getElementById('mutual-modal'), mutualListEl = document.getElementById('mutual-list'), mutualSettingsEl = document.getElementById('mutual-settings');
+        const mutualNamesInput = document.getElementById('mutual-names-input'), mutualTargetInput = document.getElementById('mutual-target-input'), mutualHelperButtonsEl = document.getElementById('mutual-helper-buttons');
 
-        // Default structure
-        window.mutualData = {
-            target: 3,
-            names: ['A', 'B', 'C'],
-            users: {} 
-        };
+        const saveMutual = () => window.saveMutualToCloud(window.mutualData);
+        window.saveMutual = saveMutual;
 
-        window.saveMutual = () => {
-             // Wrapper to save to Cloud
-             if(window.saveMutualToCloud) window.saveMutualToCloud(window.mutualData);
-        }
+        const openMutualModal = () => { renderMutualList(); mutualSettingsEl.classList.add('hidden'); mutualListEl.classList.remove('hidden'); mutualModalEl.classList.remove('hidden'); lucide.createIcons(); };
+        window.openMutualModal = openMutualModal;
 
-        window.openMutualModal = () => {
-            window.renderMutualList(); // Render what we have in memory from Firestore
-            mutualSettingsEl.classList.add('hidden');
-            mutualListEl.classList.remove('hidden');
-            mutualQuickHelperEl.classList.remove('hidden');
-            mutualModalEl.classList.remove('hidden');
-            lucide.createIcons();
-        }
+        const closeMutualModal = () => mutualModalEl.classList.add('hidden');
+        window.closeMutualModal = closeMutualModal;
 
-        window.closeMutualModal = () => mutualModalEl.classList.add('hidden');
-
-        window.toggleMutualSettings = () => {
-            if (mutualSettingsEl.classList.contains('hidden')) {
-                // Show Settings
-                mutualSettingsEl.classList.remove('hidden');
-                mutualListEl.classList.add('hidden');
-                mutualQuickHelperEl.classList.add('hidden');
-                mutualNamesInput.value = (window.mutualData.names || []).join('\n');
-                mutualTargetInput.value = window.mutualData.target || 3;
-                document.getElementById('target-display').textContent = window.mutualData.target || 3;
-            } else {
-                // Show List
-                mutualSettingsEl.classList.add('hidden');
-                mutualListEl.classList.remove('hidden');
-                mutualQuickHelperEl.classList.remove('hidden');
-            }
-        }
-
-        window.saveMutualConfig = () => {
-            const raw = mutualNamesInput.value;
-            const newNames = raw.split('\n').map(s => s.trim()).filter(s => s);
-            const newTarget = parseInt(mutualTargetInput.value) || 3;
-            
-            if (newNames.length === 0) return alert('請至少輸入一個名字');
-
-            const currentUsers = window.mutualData.users || {};
+        const toggleMutualSettings = () => { if (mutualSettingsEl.classList.contains('hidden')) { mutualSettingsEl.classList.remove('hidden'); mutualListEl.classList.add('hidden'); mutualNamesInput.value = (window.mutualData.names || []).join('\n'); mutualTargetInput.value = window.mutualData.target || 3; document.getElementById('target-display').textContent = window.mutualData.target || 3; } else { mutualSettingsEl.classList.add('hidden'); mutualListEl.classList.remove('hidden'); } };
+        window.toggleMutualSettings = toggleMutualSettings;
+        
+        const saveMutualConfig = () => {
+            const newNames = mutualNamesInput.value.split('\n').map(s => s.trim()).filter(s => s);
+            if (!newNames.length) return alert('請至少輸入一個名字');
             const newUsers = {};
-            newNames.forEach(n => {
-                if (currentUsers[n]) {
-                    newUsers[n] = currentUsers[n];
-                } else {
-                    newUsers[n] = { url: '', history: [], todayHelper: null };
-                }
-            });
+            newNames.forEach(n => { newUsers[n] = window.mutualData.users[n] || { url: '', history: [], todayHelper: null }; });
+            window.mutualData.names = newNames; window.mutualData.users = newUsers; window.mutualData.target = parseInt(mutualTargetInput.value) || 3;
+            saveMutual(); toggleMutualSettings(); renderMutualList();
+        };
+        window.saveMutualConfig = saveMutualConfig;
 
-            window.mutualData.names = newNames;
-            window.mutualData.users = newUsers;
-            window.mutualData.target = newTarget;
-            
-            saveMutual();
-            toggleMutualSettings();
-            renderMutualList();
-        }
-
-        window.updateMutualUrl = (name, url) => {
+        const updateMutualUrl = (name, url) => {
             if (!window.mutualData.users[name]) window.mutualData.users[name] = { url: '', history: [], todayHelper: null };
             window.mutualData.users[name].url = url.trim();
-            saveMutual(); // Sync to cloud
-        }
-
-        window.toggleHistory = (targetName, helperName) => {
-            const user = window.mutualData.users[targetName];
-            if (!user) return;
-
-            const idx = user.history.indexOf(helperName);
-            if (idx > -1) {
-                user.history.splice(idx, 1);
-                if (user.todayHelper === helperName) user.todayHelper = null;
-            } else {
-                user.history.push(helperName);
-                user.todayHelper = helperName;
-            }
-            saveMutual(); // Sync
-            renderMutualList();
-        }
-
-        window.markAllAsHelpedBy = (helperName) => {
-            if(!confirm(`確定今天由「${helperName}」幫大家簽到嗎？`)) return;
-
-            (window.mutualData.names || []).forEach(targetName => {
-                if (targetName !== helperName) {
-                    const user = window.mutualData.users[targetName];
-                    if(user) {
-                        if (!user.history.includes(helperName)) user.history.push(helperName);
-                        user.todayHelper = helperName;
-                    }
-                }
-            });
             saveMutual();
-            renderMutualList();
-        }
+        };
+        window.updateMutualUrl = updateMutualUrl;
 
-        window.showResetMenu = () => {
-            resetMenuModalEl.classList.remove('hidden');
-            lucide.createIcons();
-        }
+        const toggleHistory = (target, helper) => {
+            const user = window.mutualData.users[target]; if (!user) return;
+            const idx = user.history.indexOf(helper);
+            if (idx > -1) { user.history.splice(idx, 1); if (user.todayHelper === helper) user.todayHelper = null; } else { user.history.push(helper); user.todayHelper = helper; }
+            saveMutual(); renderMutualList();
+        };
+        window.toggleHistory = toggleHistory;
 
-        window.closeResetMenu = () => {
-            resetMenuModalEl.classList.add('hidden');
-        }
+        const markAllAsHelpedBy = (helper) => {
+            if(!confirm(`確定今天由「${helper}」幫大家簽到嗎？`)) return;
+            (window.mutualData.names||[]).forEach(t => { if (t !== helper && window.mutualData.users[t]) { if (!window.mutualData.users[t].history.includes(helper)) window.mutualData.users[t].history.push(helper); window.mutualData.users[t].todayHelper = helper; } });
+            saveMutual(); renderMutualList();
+        };
+        window.markAllAsHelpedBy = markAllAsHelpedBy;
 
-        window.resetRound = () => {
-             (window.mutualData.names || []).forEach(n => {
-                if(window.mutualData.users[n]) {
-                    window.mutualData.users[n].todayHelper = null;
-                    window.mutualData.users[n].history = [];
-                }
-            });
-            saveMutual();
-            renderMutualList();
-            closeResetMenu();
-        }
+        const resetRound = () => {
+            if(!confirm("確定要清空所有人的今日簽到紀錄嗎？")) return;
+            (window.mutualData.names||[]).forEach(n => { if(window.mutualData.users[n]) { window.mutualData.users[n].todayHelper = null; window.mutualData.users[n].history = []; } });
+            saveMutual(); renderMutualList();
+        };
+        window.resetRound = resetRound;
 
-        window.pasteToMutual = async (inputId, name) => {
-            try {
-                const text = await navigator.clipboard.readText();
-                const input = document.getElementById(inputId);
-                input.value = text;
-                updateMutualUrl(name, text);
-            } catch (err) {
-                 alert('請手動貼上');
-            }
-        }
-
-        window.renderMutualList = () => {
-            const data = window.mutualData;
-            const names = data.names || [];
-            
-            // Render Header Buttons
-            mutualHelperButtonsEl.innerHTML = names.map(name => {
-                return `<button onclick="markAllAsHelpedBy('${name}')" class="px-3 py-1 bg-dark-card border border-dark-border rounded text-xs font-bold hover:bg-blue-600 hover:text-white transition-colors">${name}</button>`;
-            }).join('');
-
-            // Render Cards
-            mutualListEl.innerHTML = names.map(name => {
-                const userData = (data.users && data.users[name]) ? data.users[name] : { url: '', history: [], todayHelper: null };
-                const historyCount = userData.history ? userData.history.length : 0;
-                const target = data.target || 3;
-                const isRoundComplete = historyCount >= target;
-                const isTodayDone = !!userData.todayHelper;
-
-                let cardBorder = 'border-dark-border bg-dark-card';
-                let cardStatusBadge = '';
-                
-                if (isRoundComplete) {
-                    cardBorder = 'border-amber-500/50 bg-amber-900/10 shadow-[0_0_15px_rgba(245,158,11,0.1)]';
-                    cardStatusBadge = `<span class="ml-2 text-[10px] font-bold text-amber-900 bg-amber-400 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm"><i data-lucide="crown" class="w-3 h-3"></i> 本輪完成</span>`;
-                }
-                
-                let todayStatusHtml = '';
-                if (isTodayDone) {
-                     todayStatusHtml = `<span class="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> 今日已簽 (${userData.todayHelper})</span>`;
-                } else {
-                     todayStatusHtml = `<span class="text-xs font-bold text-dark-subtext bg-white/5 px-2 py-0.5 rounded">今日未簽</span>`;
-                }
-
-                const helperButtons = names
-                    .filter(n => n !== name)
-                    .map(helper => {
-                        const inHistory = userData.history && userData.history.includes(helper);
-                        const btnClass = inHistory 
-                            ? 'bg-emerald-600 text-white shadow shadow-emerald-900/50 border-emerald-500' 
-                            : 'bg-dark-input text-dark-subtext border-dark-border hover:bg-white/5 hover:text-white';
-                        
-                        return `
-                            <button onclick="toggleHistory('${name}', '${helper}')" 
-                                class="${btnClass} border px-3 py-1.5 rounded text-xs font-bold transition-all active:scale-95 flex-1 min-w-[3rem]">
-                                ${helper}
-                            </button>
-                        `;
-                    }).join('');
+        const renderMutualList = () => {
+            const d = window.mutualData; const names = d.names || [];
+            mutualHelperButtonsEl.innerHTML = names.map(n => `<button onclick="markAllAsHelpedBy('${n}')" class="px-3 py-1 bg-dark-card border border-dark-border rounded text-xs font-bold hover:bg-blue-600 hover:text-white transition-colors">${n}</button>`).join('');
+            mutualListEl.innerHTML = names.map(n => {
+                const u = d.users[n] || { url: '', history: [], todayHelper: null };
+                const done = u.history.length >= (d.target||3);
+                const border = done ? 'border-amber-500/50 bg-amber-900/10' : 'border-dark-border bg-dark-card';
+                const status = u.todayHelper ? `<span class="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> 已簽 (${u.todayHelper})</span>` : `<span class="text-xs font-bold text-dark-subtext bg-white/5 px-2 py-0.5 rounded">未簽</span>`;
+                const helpers = names.filter(x => x !== n).map(h => {
+                    const active = u.history.includes(h);
+                    return `<button onclick="toggleHistory('${n}', '${h}')" class="${active ? 'bg-emerald-600 text-white shadow shadow-emerald-900/50 border-emerald-500' : 'bg-dark-input text-dark-subtext border-dark-border'} border px-3 py-1.5 rounded text-xs font-bold transition-all active:scale-95 flex-1 min-w-[3rem]">${h}</button>`;
+                }).join('');
 
                 return `
-                <div class="${cardBorder} border rounded-xl p-4 transition-all relative overflow-hidden">
-                    ${isRoundComplete ? '<div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-amber-400/20 to-transparent rounded-bl-3xl -mr-4 -mt-4"></div>' : ''}
-                    
+                <div class="${border} border rounded-xl p-4 relative overflow-hidden">
+                    ${done ? '<div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-amber-400/20 to-transparent rounded-bl-3xl -mr-4 -mt-4"></div>' : ''}
                     <div class="flex justify-between items-start mb-3 relative z-10">
-                        <div>
-                            <div class="flex items-center gap-2 mb-1">
-                                <h4 class="font-bold text-white text-lg">${name}</h4>
-                                ${cardStatusBadge}
-                            </div>
-                            <div class="flex items-center gap-2">
-                                ${todayStatusHtml}
-                                <span class="text-[10px] font-mono text-dark-subtext bg-dark-bg px-1.5 rounded border border-white/5">
-                                    累計: <span class="${isRoundComplete ? 'text-amber-400' : 'text-white'}">${historyCount}</span>/${target}
-                                </span>
-                            </div>
-                        </div>
-                        <button onclick="if(window.mutualData.users['${name}'].url) openUrl(window.mutualData.users['${name}'].url)" 
-                            class="${userData.url ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-dark-input text-dark-subtext cursor-not-allowed'} px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">
-                            前往 <i data-lucide="external-link" class="w-3 h-3"></i>
-                        </button>
+                        <div><div class="flex items-center gap-2 mb-1"><h4 class="font-bold text-white text-lg">${n}</h4>${done ? '<span class="text-[10px] font-bold text-amber-900 bg-amber-400 px-2 py-0.5 rounded shadow-sm">本輪完成</span>' : ''}</div><div class="flex items-center gap-2">${status}<span class="text-[10px] font-mono text-dark-subtext bg-dark-bg px-1.5 rounded border border-white/5">累計: <span class="${done ? 'text-amber-400' : 'text-white'}">${u.history.length}</span>/${d.target}</span></div></div>
+                        <button onclick="if(window.mutualData.users['${n}'].url) openUrl(window.mutualData.users['${n}'].url)" class="${u.url ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-dark-input text-dark-subtext cursor-not-allowed'} px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">前往 <i data-lucide="external-link" class="w-3 h-3"></i></button>
                     </div>
-
                     <div class="flex gap-2 mb-4 relative z-10">
-                        <div class="relative flex-1">
-                            <input type="text" 
-                                value="${userData.url || ''}" 
-                                oninput="updateMutualUrl('${name}', this.value)"
-                                id="mutual-input-${name}"
-                                class="w-full bg-dark-input border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors" 
-                                placeholder="貼上 ${name} 的連結...">
-                        </div>
+                        <div class="relative flex-1"><input type="text" value="${u.url||''}" oninput="updateMutualUrl('${n}', this.value)" id="mutual-input-${n}" class="w-full bg-dark-input border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors" placeholder="貼上連結..."></div>
                         <div class="flex gap-1">
-                            <button onclick="pasteToMutual('mutual-input-${name}', '${name}')" class="bg-dark-input border border-dark-border px-3 rounded-lg text-dark-subtext hover:text-white hover:bg-white/5 transition-colors" title="貼上">
-                                <i data-lucide="clipboard-paste" class="w-4 h-4"></i>
-                            </button>
-                            <button onclick="updateMutualUrl('${name}', '')" class="bg-red-500/10 border border-red-500/30 px-3 rounded-lg text-red-400 hover:text-white hover:bg-red-500 transition-colors" title="清除">
-                                <i data-lucide="trash-2" class="w-4 h-4"></i>
-                            </button>
+                            <button onclick="pasteToMutual('mutual-input-${n}', '${n}')" class="bg-dark-input border border-dark-border px-3 rounded-lg text-dark-subtext hover:text-white hover:bg-white/5 transition-colors"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
+                            <button onclick="updateMutualUrl('${n}', '')" class="bg-red-500/10 border border-red-500/30 px-3 rounded-lg text-red-400 hover:text-white hover:bg-red-500 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
                     </div>
-
-                    <div class="border-t border-white/5 pt-3 relative z-10">
-                        <p class="text-[10px] text-dark-subtext font-bold uppercase mb-2 flex justify-between">
-                            <span>歷史紀錄 (點擊切換)</span>
-                            <span class="text-white/30">${(userData.history || []).join(', ')}</span>
-                        </p>
-                        <div class="flex flex-wrap gap-2">
-                            ${helperButtons}
-                        </div>
-                    </div>
-                </div>
-                `;
+                    <div class="border-t border-white/5 pt-3 relative z-10"><div class="flex flex-wrap gap-2">${helpers}</div></div>
+                </div>`;
             }).join('');
             lucide.createIcons();
+        };
+        window.renderMutualList = renderMutualList;
+
+        // --- Tracker Logic ---
+        let editingId = null; let selectedTrackerIds = new Set();
+        const listEl = document.getElementById('tracker-list'), modalEl = document.getElementById('tracker-modal');
+
+        const checkScheduledTasks = (now) => {
+            const hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
+            window.getTrackerData().forEach(l => {
+                if (l.schedule === hm && !l.executed) {
+                    window.updateTaskInCloud(l.id, { executed: true, clicks: (l.clicks||0)+1 });
+                    const win = window.open(l.url.startsWith('http')?l.url:'https://'+l.url, '_blank');
+                    if(!win) { popupWarning.classList.remove('hidden'); popupWarningIcon.classList.remove('hidden'); }
+                }
+            });
+        };
+
+        const toggleTrackerSelection = (id) => { if (selectedTrackerIds.has(id)) selectedTrackerIds.delete(id); else selectedTrackerIds.add(id); renderTracker(); };
+        window.toggleTrackerSelection = toggleTrackerSelection;
+
+        const toggleSelectAll = () => { const all = window.getTrackerData().map(l=>l.id); if (all.every(id=>selectedTrackerIds.has(id))) selectedTrackerIds.clear(); else all.forEach(id=>selectedTrackerIds.add(id)); renderTracker(); };
+        window.toggleSelectAll = toggleSelectAll;
+
+        const deleteSelectedTasks = () => { if(selectedTrackerIds.size && confirm('確定刪除？')) { selectedTrackerIds.forEach(id=>window.deleteTaskFromCloud(id)); selectedTrackerIds.clear(); } };
+        window.deleteSelectedTasks = deleteSelectedTasks;
+        
+        const quickPaste = async (idx) => {
+            try { const text = await navigator.clipboard.readText(); const clean = extractUrl(text); const data = window.getTrackerData(); window.updateTaskInCloud(data[idx].id, { url: clean }); } 
+            catch(e) { const m = prompt('手動貼上:'); if(m) window.updateTaskInCloud(window.getTrackerData()[idx].id, { url: extractUrl(m) }); }
+        };
+        window.quickPaste = quickPaste;
+
+        const clearTrackerUrl = (id) => { if(confirm('清除連結？')) window.updateTaskInCloud(id, { url: '' }); };
+        window.clearTrackerUrl = clearTrackerUrl;
+
+        const renderTracker = () => {
+            const data = window.getTrackerData(); const empty = document.getElementById('tracker-empty');
+            if(!data.length) { listEl.innerHTML = ''; empty.classList.remove('hidden'); return; }
+            empty.classList.add('hidden');
+            const allSel = data.length && data.every(l=>selectedTrackerIds.has(l.id)); const hasSel = selectedTrackerIds.size > 0;
+            document.getElementById('btn-select-all').className = `text-xs border px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0 ${allSel ? 'bg-blue-600 text-white border-blue-600' : 'bg-dark-card border-dark-border text-dark-subtext'}`;
+            if(hasSel) document.getElementById('btn-delete-selected').classList.remove('hidden'); else document.getElementById('btn-delete-selected').classList.add('hidden');
+
+            listEl.innerHTML = data.map((l, idx) => {
+                const count = l.clicks || 0; const sel = selectedTrackerIds.has(l.id);
+                const dots = count > 5 ? `<span class="text-xs font-mono font-bold text-emerald-400">${count} runs</span>` : Array(count).fill(`<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>`).join('');
+                const sched = l.schedule ? `<div class="flex items-center gap-1.5 bg-dark-bg/50 px-2 py-1 rounded border border-white/5 ml-auto md:ml-0 md:mr-2"><i data-lucide="clock" class="w-3 h-3 ${l.executed?'text-dark-subtext':'text-amber-400'}"></i><span class="text-[10px] font-mono font-bold ${l.executed?'text-dark-subtext opacity-50 line-through':'text-amber-400'}">${l.schedule}</span></div>` : '';
+                return `
+                <div class="group relative bg-dark-card border border-dark-border hover:border-slate-500 rounded-xl p-3 flex items-center gap-3 transition-all select-none shadow-sm">
+                    <div class="flex items-center justify-center pl-1 pr-2"><input type="checkbox" class="custom-checkbox" onchange="toggleTrackerSelection('${l.id}')" ${sel?'checked':''}></div>
+                    <div class="flex-1 min-w-0"><div class="flex items-center justify-between mb-0.5"><h3 class="font-medium text-sm text-white truncate pr-2">${l.name}</h3>${sched}</div><div class="flex items-center gap-2 h-4">${dots}</div></div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="if('${l.url}') openUrl('${l.url}'); else alert('無連結'); window.updateTaskInCloud('${l.id}', {clicks:((${l.clicks}||0)+1)})" class="bg-blue-600/10 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 flex items-center gap-1">GO <i data-lucide="external-link" class="w-3 h-3"></i></button>
+                        <div class="flex flex-col gap-1 border-l border-white/5 pl-2">
+                            <button onclick="quickPaste(${idx})" class="text-dark-subtext/60 hover:text-emerald-400 p-1" title="貼上覆蓋"><i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i></button>
+                            ${l.url ? `<button onclick="clearTrackerUrl('${l.id}')" class="text-dark-subtext/60 hover:text-red-400 p-1" title="清除連結"><i data-lucide="link-2-off" class="w-3.5 h-3.5"></i></button>` : ''}
+                            <button onclick="openTrackerModal(); editingId='${l.id}'; document.getElementById('modal-name').value='${l.name}'; document.getElementById('modal-url').value='${l.url}'; document.getElementById('modal-schedule').value='${l.schedule||''}';" class="text-dark-subtext/60 hover:text-white p-1"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="if(confirm('刪除？')) window.deleteTaskFromCloud('${l.id}')" class="text-dark-subtext/60 hover:text-red-400 p-1"><i data-lucide="trash" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+            lucide.createIcons();
+        };
+        window.renderTracker = renderTracker;
+
+        const openUrl = (url) => { if(!url) return; const win = window.open(url.startsWith('http')?url:'https://'+url, '_blank'); if(!win) alert('Pop-up Blocked'); };
+        window.openUrl = openUrl;
+
+        const saveTrackerTask = () => {
+            const name = document.getElementById('modal-name').value.trim(); const raw = document.getElementById('modal-url').value.trim(); const sch = document.getElementById('modal-schedule').value;
+            if(!name) return; const clean = extractUrl(raw); const data = { name, url: clean, schedule: sch || null };
+            if(editingId) window.updateTaskInCloud(editingId, { ...data, executed: false }); else window.saveTaskToCloud(data);
+            modalEl.classList.add('hidden');
+        };
+        window.saveTrackerTask = saveTrackerTask;
+
+        const closeTrackerModal = () => { modalEl.classList.add('hidden'); editingId=null; };
+        window.closeTrackerModal = closeTrackerModal;
+
+        const openTrackerModal = () => {
+            editingId = null;
+            document.getElementById('modal-title').innerHTML = `<i data-lucide="plus" class="w-5 h-5 text-emerald-400"></i><span>New Task</span>`;
+            document.getElementById('modal-name').value = '';
+            document.getElementById('modal-url').value = '';
+            document.getElementById('modal-schedule').value = ''; 
+            modalEl.classList.remove('hidden');
+            lucide.createIcons();
+        };
+        window.openTrackerModal = openTrackerModal;
+
+        const editTracker = (idx) => {
+            const data = window.getTrackerData();
+            const item = data[idx];
+            editingId = item.id; // Store Doc ID
+            document.getElementById('modal-title').innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>Edit Task</span>`;
+            document.getElementById('modal-name').value = item.name;
+            document.getElementById('modal-url').value = item.url || '';
+            document.getElementById('modal-schedule').value = item.schedule || ''; 
+            modalEl.classList.remove('hidden');
+            lucide.createIcons();
+        };
+        window.editTracker = editTracker;
+
+        const deleteTracker = (idx) => {
+            const data = window.getTrackerData();
+            if(confirm('Delete this routine?')) {
+                window.deleteTaskFromCloud(data[idx].id);
+                selectedTrackerIds.delete(data[idx].id);
+            }
+        };
+        window.deleteTracker = deleteTracker;
+
+        // --- SHORTCUT INTENT LOGIC (AUTO-ROUTE) ---
+        function checkIncomingShare() {
+            // Need data to decide routing, so if mutual data not ready, wait
+            if (!isMutualLoaded) return; // Will be called again by onSnapshot
+
+            const params = new URLSearchParams(window.location.search);
+            const sharedUrl = params.get('share_url');
+            const sharedTitle = (params.get('share_title') || 'Shared Link').trim();
+
+            if (sharedUrl) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+                const cleanUrl = extractUrl(sharedUrl);
+                const names = window.mutualData.names || [];
+                const matchName = names.find(n => n.toLowerCase() === sharedTitle.toLowerCase());
+
+                if (matchName) {
+                    updateMutualUrl(matchName, cleanUrl);
+                    showToast(`已更新互助連結: ${matchName}`);
+                } else {
+                    window.saveTaskToCloud({ name: sharedTitle, url: cleanUrl, schedule: null });
+                    showToast(`已自動儲存: ${sharedTitle}`);
+                }
+            }
         }
 
-        // =======================
-        // TIMER LOGIC (CLOUD)
-        // =======================
-        const tContainer = document.getElementById('timers-container');
-        const tEmpty = document.getElementById('timer-empty');
+        function showToast(msg) {
+            const t = document.createElement('div');
+            t.className = "fixed top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-xl shadow-2xl z-[70] flex items-center gap-3 animate-bounce border border-emerald-400/30 backdrop-blur-md";
+            t.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5"></i><span class="text-sm font-bold tracking-wide">${msg}</span>`;
+            document.body.appendChild(t); lucide.createIcons(); setTimeout(()=>t.remove(), 3000);
+        }
         
-        window.updateTimerLoop = () => {
+        const updateTimerLoop = () => {
             const now = new Date();
             headerTime.textContent = formatTimeWithSeconds(now);
             headerDate.textContent = getTaipeiDate();
@@ -1051,432 +720,11 @@
 
             renderTimers();
         }
+        window.updateTimerLoop = updateTimerLoop;
 
-        function renderTimers() {
-            const timers = window.getTimerData();
-            if (timers.length === 0) {
-                tContainer.innerHTML = '';
-                tEmpty.classList.remove('hidden');
-                return;
-            }
-            tEmpty.classList.add('hidden');
-            
-            tContainer.innerHTML = timers.map(t => {
-                const total = t.totalSeconds || 60; // fallback
-                const percent = Math.max(0, (t.remaining / total) * 100);
-                const isDone = t.isFinished;
-                const statusClass = isDone ? 'bg-red-500/10 border-red-500/30' : 'bg-dark-card border-dark-border';
-                const progressColor = isDone ? 'bg-red-500' : 'bg-blue-500';
-
-                const fmtDuration = (sec) => {
-                    const h = Math.floor(sec / 3600);
-                    const m = Math.floor((sec % 3600) / 60);
-                    const s = sec % 60;
-                    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
-                };
-
-                return `
-                <div class="relative ${statusClass} border rounded-xl p-4 overflow-hidden transition-all group hover:border-slate-500 pr-12">
-                    <div class="absolute bottom-0 left-0 h-1 ${progressColor} transition-all duration-1000 opacity-60" style="width: ${percent}%"></div>
-                    
-                    <div class="flex justify-between items-center relative z-10">
-                        <div class="flex items-center gap-4 overflow-hidden flex-1">
-                            <div class="w-12 h-12 flex-shrink-0 rounded-xl ${isDone ? 'bg-red-500/20' : 'bg-blue-500/10'} flex items-center justify-center border border-white/5">
-                                ${isDone ? '<i data-lucide="bell" class="w-6 h-6 text-red-500 animate-bounce"></i>' : '<i data-lucide="timer" class="w-6 h-6 text-blue-400"></i>'}
-                            </div>
-                            <div class="min-w-0 flex flex-col justify-center">
-                                <div class="font-medium text-xs text-dark-subtext truncate mb-1 uppercase tracking-wide flex items-center gap-1">
-                                    ${t.label}
-                                    ${t.hasDelay ? '<span class="text-[9px] text-amber-400 bg-amber-400/10 px-1 rounded border border-amber-400/20">BUFFER</span>' : ''}
-                                </div>
-                                <div class="font-mono font-bold ${isDone ? 'text-red-400' : 'text-white'} text-2xl sm:text-3xl leading-none tracking-tight">
-                                    ${isDone ? 'TIME UP' : fmtDuration(t.remaining)}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="flex items-center gap-3">
-                            <div class="flex flex-col items-end justify-center pl-4 border-l border-white/10">
-                                <span class="text-[10px] font-bold text-dark-subtext uppercase tracking-wider mb-1">Ends At</span>
-                                <span class="font-mono font-bold text-emerald-400 text-2xl sm:text-3xl leading-none">
-                                    ${formatTime(t.endTime)}
-                                </span>
-                            </div>
-                            
-                            <button onclick="deleteTimerFromCloud('${t.id}')" class="w-8 h-8 flex items-center justify-center border border-red-500/40 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all ml-1 shrink-0" title="Remove">
-                                <i data-lucide="x" class="w-5 h-5"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>`;
-            }).join('');
-            lucide.createIcons();
-        }
-
-        document.getElementById('timer-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const label = document.getElementById('t-label').value.trim() || 'Task';
-            const h = parseInt(inputH.value) || 0;
-            const m = parseInt(inputM.value) || 0;
-            const s = parseInt(inputS.value) || 0;
-            const delayMin = parseInt(globalDelayInput.value) || 0;
-            
-            const inputSeconds = h * 3600 + m * 60 + s;
-            const total = inputSeconds + (delayMin * 60);
-            
-            if (total <= 0) return;
-
-            const endTime = new Date(new Date().getTime() + total * 1000);
-            
-            window.saveTimerToCloud({
-                label,
-                endTime: endTime,
-                totalSeconds: total,
-                hasDelay: delayMin > 0
-            });
-            
-            // Clear inputs
-            document.getElementById('t-label').value = '';
-            inputH.value = '';
-            inputM.value = '';
-            inputS.value = '';
-            inputH.focus();
-        });
-
-        // =======================
-        // TRACKER LOGIC (CLOUD)
-        // =======================
-        let editingId = null;
-        let selectedTrackerIds = new Set(); 
-
-        const listEl = document.getElementById('tracker-list');
-        const modalEl = document.getElementById('tracker-modal');
-
-        function checkScheduledTasks(now) {
-            const currentHHMM = pad(now.getHours()) + ':' + pad(now.getMinutes());
-            const data = window.getTrackerData();
-
-            data.forEach(link => {
-                if (link.schedule && link.url && link.schedule === currentHHMM && !link.executed) {
-                    console.log(`Auto-opening ${link.name} at ${currentHHMM}`);
-                    
-                    // Optimistic update in cloud
-                    window.updateTaskInCloud(link.id, {
-                        executed: true,
-                        clicks: (link.clicks || 0) + 1
-                    });
-
-                    try {
-                        const win = window.open(link.url.startsWith('http') ? link.url : 'https://' + link.url, '_blank');
-                        if (!win || win.closed || typeof win.closed == 'undefined') {
-                            showPopupWarning();
-                        }
-                    } catch (e) {
-                        console.error(e);
-                        showPopupWarning();
-                    }
-                }
-            });
-        }
-        
-        function showPopupWarning() {
-            popupWarning.classList.remove('hidden');
-            popupWarningIcon.classList.remove('hidden');
-        }
-
-        window.toggleTrackerSelection = (id) => {
-            if (selectedTrackerIds.has(id)) {
-                selectedTrackerIds.delete(id);
-            } else {
-                selectedTrackerIds.add(id);
-            }
-            renderTracker(); // Just re-render UI
-        };
-
-        window.toggleSelectAll = () => {
-            const data = window.getTrackerData();
-            const allIds = data.map(l => l.id);
-            const allSelected = allIds.length > 0 && allIds.every(id => selectedTrackerIds.has(id));
-            
-            if (allSelected) {
-                selectedTrackerIds.clear();
-            } else {
-                allIds.forEach(id => selectedTrackerIds.add(id));
-            }
-            renderTracker();
-        };
-
-        window.deleteSelectedTasks = () => {
-            if (selectedTrackerIds.size === 0) return;
-            
-            if (confirm(`確定刪除選取的 ${selectedTrackerIds.size} 筆任務？`)) {
-                selectedTrackerIds.forEach(id => {
-                    window.deleteTaskFromCloud(id);
-                });
-                selectedTrackerIds.clear();
-            }
-        };
-
-        window.quickPaste = async (idx) => {
-            try {
-                const text = await navigator.clipboard.readText();
-                if (!text) return alert('剪貼簿是空的');
-                
-                const data = window.getTrackerData();
-                const link = data[idx];
-                const oldUrl = link.url;
-                
-                const rawUrl = text.trim();
-                const urlMatch = rawUrl.match(/(https?:\/\/[^\s]+)/);
-                const cleanUrl = urlMatch ? urlMatch[0] : rawUrl;
-                
-                if (cleanUrl === oldUrl) return alert('網址未變更');
-                
-                window.updateTaskInCloud(link.id, { url: cleanUrl });
-                alert(`已將 "${link.name}" 的網址更新為:\n${cleanUrl}`);
-                
-            } catch (err) {
-                const manual = prompt('無法自動讀取剪貼簿，請手動貼上網址:', '');
-                if (manual) {
-                    const data = window.getTrackerData();
-                    window.updateTaskInCloud(data[idx].id, { url: manual.trim() });
-                }
-            }
-        };
-
-        window.clearTrackerUrl = (id) => {
-            if(confirm('確定要清除此任務的連結嗎？')) {
-                window.updateTaskInCloud(id, { url: '' });
-            }
-        };
-
-        window.renderTracker = () => {
-            const data = window.getTrackerData();
-            const empty = document.getElementById('tracker-empty');
-            
-            if(data.length === 0) {
-                listEl.innerHTML = '';
-                empty.classList.remove('hidden');
-                return;
-            }
-            empty.classList.add('hidden');
-
-            const allIds = data.map(l => l.id);
-            const allSelected = allIds.length > 0 && allIds.every(id => selectedTrackerIds.has(id));
-            const hasSelection = selectedTrackerIds.size > 0;
-
-            // Update UI buttons based on selection
-            const btnSelectAll = document.getElementById('btn-select-all');
-            if (btnSelectAll) {
-                 if (allSelected) {
-                    btnSelectAll.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
-                    btnSelectAll.classList.remove('bg-dark-card', 'text-dark-subtext', 'border-dark-border');
-                 } else {
-                    btnSelectAll.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
-                    btnSelectAll.classList.add('bg-dark-card', 'text-dark-subtext', 'border-dark-border');
-                 }
-            }
-            const btnDelete = document.getElementById('btn-delete-selected');
-            if (btnDelete) {
-                if (hasSelection) btnDelete.classList.remove('hidden');
-                else btnDelete.classList.add('hidden');
-            }
-
-            listEl.innerHTML = data.map((link, idx) => {
-                const count = link.clicks || 0;
-                const isSelected = selectedTrackerIds.has(link.id); 
-                let dotsHtml = '';
-                if(count > 0 && count <= 5) {
-                    dotsHtml = Array(count).fill(`<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>`).join('');
-                } else if (count > 5) {
-                    dotsHtml = `<span class="text-xs font-mono font-bold text-emerald-400">${count} runs</span>`;
-                } else {
-                    dotsHtml = `<span class="text-[10px] text-dark-subtext uppercase font-bold opacity-50">Ready</span>`;
-                }
-
-                let scheduleHtml = '';
-                if (link.schedule) {
-                    const statusColor = link.executed ? 'text-dark-subtext opacity-50 line-through' : 'text-amber-400';
-                    const iconColor = link.executed ? 'text-dark-subtext' : 'text-amber-400';
-                    scheduleHtml = `
-                        <div class="flex items-center gap-1.5 bg-dark-bg/50 px-2 py-1 rounded border border-white/5 ml-auto md:ml-0 md:mr-2">
-                            <i data-lucide="clock" class="w-3 h-3 ${iconColor}"></i>
-                            <span class="text-[10px] font-mono font-bold ${statusColor}">${link.schedule}</span>
-                        </div>
-                    `;
-                }
-
-                const hasUrl = !!link.url;
-
-                return `
-                <div class="group relative bg-dark-card border border-dark-border hover:border-slate-500 rounded-xl p-3 flex items-center gap-3 transition-all select-none shadow-sm">
-                    <div class="flex items-center justify-center pl-1 pr-2">
-                        <input type="checkbox" class="custom-checkbox" 
-                            onchange="toggleTrackerSelection('${link.id}')" 
-                            ${isSelected ? 'checked' : ''}>
-                    </div>
-
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center justify-between mb-0.5">
-                            <h3 class="font-medium text-sm text-white truncate pr-2">${link.name}</h3>
-                            ${scheduleHtml}
-                        </div>
-                        <div class="flex items-center gap-2 h-4">
-                            ${dotsHtml}
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button onclick="visitLink(${idx})" class="bg-blue-600/10 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 flex items-center gap-1">
-                            GO <i data-lucide="external-link" class="w-3 h-3"></i>
-                        </button>
-                        <div class="flex flex-col gap-1 border-l border-white/5 pl-2">
-                            <button onclick="quickPaste(${idx})" class="text-dark-subtext/60 hover:text-emerald-400 p-1" title="快速貼上網址 (覆蓋)"><i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i></button>
-                            <button onclick="clearTrackerUrl('${link.id}')" class="${hasUrl ? 'text-dark-subtext/60 hover:text-red-400' : 'hidden'} p-1" title="清除連結"><i data-lucide="link-2-off" class="w-3.5 h-3.5"></i></button>
-                            <button onclick="editTracker(${idx})" class="text-dark-subtext/60 hover:text-white p-1"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
-                            <button onclick="deleteTracker(${idx})" class="text-dark-subtext/60 hover:text-red-400 p-1"><i data-lucide="trash" class="w-3.5 h-3.5"></i></button>
-                        </div>
-                    </div>
-                </div>`;
-            }).join('');
-            lucide.createIcons();
-        }
-
-        window.visitLink = (idx) => {
-            const data = window.getTrackerData();
-            const link = data[idx];
-            // Update Cloud
-            window.updateTaskInCloud(link.id, {
-                clicks: (link.clicks || 0) + 1
-            });
-            if(link.url) openUrl(link.url);
-        };
-        
-        function openUrl(url) {
-            let targetUrl = url;
-            if (!/^https?:\/\//i.test(targetUrl)) {
-                targetUrl = 'https://' + targetUrl;
-            }
-            const win = window.open(targetUrl, '_blank');
-            if (!win || win.closed || typeof win.closed == 'undefined') {
-                showPopupWarning();
-            }
-        }
-
-        window.openTrackerModal = () => {
-            editingId = null;
-            document.getElementById('modal-title').innerHTML = `<i data-lucide="plus" class="w-5 h-5 text-emerald-400"></i><span>New Task</span>`;
-            document.getElementById('modal-name').value = '';
-            document.getElementById('modal-url').value = '';
-            document.getElementById('modal-schedule').value = ''; 
-            modalEl.classList.remove('hidden');
-            lucide.createIcons();
-        };
-
-        window.editTracker = (idx) => {
-            const data = window.getTrackerData();
-            const item = data[idx];
-            editingId = item.id; // Store Doc ID
-            document.getElementById('modal-title').innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>Edit Task</span>`;
-            document.getElementById('modal-name').value = item.name;
-            document.getElementById('modal-url').value = item.url || '';
-            document.getElementById('modal-schedule').value = item.schedule || ''; 
-            modalEl.classList.remove('hidden');
-            lucide.createIcons();
-        };
-
-        window.closeTrackerModal = () => modalEl.classList.add('hidden');
-
-        window.saveTrackerTask = () => {
-            const name = document.getElementById('modal-name').value.trim();
-            const rawUrl = document.getElementById('modal-url').value.trim();
-            const schedule = document.getElementById('modal-schedule').value; 
-            
-            if(!name) return;
-            const urlMatch = rawUrl.match(/(https?:\/\/[^\s]+)/);
-            const cleanUrl = urlMatch ? urlMatch[0] : rawUrl;
-
-            const taskData = {
-                name,
-                url: cleanUrl,
-                schedule: schedule || null, 
-            };
-
-            if(editingId !== null) {
-                // Update Cloud
-                window.updateTaskInCloud(editingId, {
-                    ...taskData,
-                    // Only reset executed if schedule changed? simplified for now
-                    executed: false 
-                });
-            } else {
-                // Add Cloud - 直接新增，不再檢查名稱是否重複
-                window.saveTaskToCloud(taskData);
-            }
-            closeTrackerModal();
-        };
-
-        window.deleteTracker = (idx) => {
-            const data = window.getTrackerData();
-            if(confirm('Delete this routine?')) {
-                window.deleteTaskFromCloud(data[idx].id);
-                selectedTrackerIds.delete(data[idx].id);
-            }
-        };
-
-        // --- SHORTCUT INTENT LOGIC (AUTO-SAVE & ROUTE) ---
-        function checkIncomingShare() {
-            // Need data to decide routing, so if mutual data not ready, wait
-            if (!isMutualLoaded) return; // Will be called again by onSnapshot
-
-            const params = new URLSearchParams(window.location.search);
-            const sharedUrl = params.get('share_url');
-            const sharedTitle = params.get('share_title');
-
-            if (sharedUrl) {
-                window.history.replaceState({}, document.title, window.location.pathname);
-                
-                const name = (sharedTitle || 'Shared Link').trim();
-                
-                // Smart Extract URL
-                const urlMatch = sharedUrl.match(/(https?:\/\/[^\s]+)/);
-                const cleanUrl = urlMatch ? urlMatch[0] : sharedUrl;
-
-                // 1. Check if name exists in Mutual List (Case-insensitive check is better UX)
-                const mutualNames = window.mutualData.names || [];
-                const matchName = mutualNames.find(n => n.toLowerCase() === name.toLowerCase());
-
-                if (matchName) {
-                    // Route to Mutual List
-                    updateMutualUrl(matchName, cleanUrl);
-                    showToast(`已更新互助連結: ${matchName}`);
-                } else {
-                    // Route to General Task List
-                    const taskData = {
-                        name: name,
-                        url: cleanUrl,
-                        schedule: null, 
-                    };
-                    window.saveTaskToCloud(taskData);
-                    showToast(`已自動儲存: ${name}`);
-                }
-            }
-        }
-
-        // Simple Toast Notification
-        function showToast(msg) {
-            const toast = document.createElement('div');
-            toast.className = "fixed top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-xl z-[60] flex items-center gap-2 animate-bounce";
-            toast.innerHTML = `<i data-lucide="check-circle" class="w-4 h-4"></i> <span class="text-xs font-bold">${msg}</span>`;
-            document.body.appendChild(toast);
-            lucide.createIcons();
-            setTimeout(() => {
-                toast.remove();
-            }, 3000);
-        }
-        
-        // Loop for timers
         setInterval(updateTimerLoop, 1000);
-        
+        // Timer Form
+        document.getElementById('timer-form').addEventListener('submit', (e) => { e.preventDefault(); const t = (parseInt(inputH.value)||0)*3600 + (parseInt(inputM.value)||0)*60 + (parseInt(inputS.value)||0) + (parseInt(globalDelayInput.value)||0)*60; if(t>0) window.saveTimerToCloud({ label: document.getElementById('t-label').value.trim()||'Task', endTime: new Date(Date.now()+t*1000), totalSeconds: t }); inputH.value=inputM.value=inputS.value=''; });
     </script>
 </body>
 </html>
