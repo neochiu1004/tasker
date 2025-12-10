@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V4 - Robust</title>
+    <title>Command Center V4 - Fixed</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -40,7 +40,7 @@
         let timerData = [];
         let isMutualLoaded = false;
 
-        // Default structure to prevent crashes
+        // Default structure
         window.mutualData = { target: 3, names: [], users: {} };
 
         // --- Auto-Login Check ---
@@ -51,10 +51,15 @@
             localStorage.setItem('cmd_workspace_id', urlSpaceId);
         }
 
-        // --- Auth & Init ---
-        const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) { alert("連線錯誤: " + e.message); } };
+        // --- 1. Define Functions FIRST (Hoisting) ---
 
-        const handleLogin = (e) => {
+        // Auth Logic
+        async function initAuth() { 
+            try { await signInAnonymously(auth); } 
+            catch (e) { alert("連線錯誤: " + e.message); } 
+        }
+
+        function handleLogin(e) {
             e.preventDefault();
             const inputId = document.getElementById('workspace-input').value.trim();
             if (!inputId) return alert("請輸入空間代碼");
@@ -62,10 +67,10 @@
             localStorage.setItem('cmd_workspace_id', inputId);
             switchLoginState(true);
             initFirestoreListeners();
-        };
+        }
         window.handleLogin = handleLogin;
 
-        const handleLogout = () => {
+        function handleLogout() {
             if(confirm('確定要登出嗎？')) {
                 localStorage.removeItem('cmd_workspace_id');
                 const url = new URL(window.location);
@@ -73,42 +78,22 @@
                 window.history.pushState({}, '', url);
                 window.location.reload();
             }
-        };
+        }
         window.handleLogout = handleLogout;
 
-        const switchLoginState = (isLoggedIn) => {
+        function switchLoginState(isLoggedIn) {
             if (isLoggedIn) {
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
-                document.getElementById('fab-new-task').classList.remove('hidden'); // Ensure FAB shows
+                document.getElementById('fab-new-task').classList.remove('hidden');
             } else {
                 document.getElementById('login-screen').classList.remove('hidden');
                 document.getElementById('main-app').classList.add('hidden');
                 document.getElementById('fab-new-task').classList.add('hidden');
             }
-        };
+        }
 
-        onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            if (user && currentWorkspaceId) {
-                switchLoginState(true);
-                initFirestoreListeners();
-                document.getElementById('workspace-id-display').textContent = currentWorkspaceId;
-                
-                // Safety Timeout: If firestore is slow, process URL anyway after 2s
-                setTimeout(() => {
-                    if (!isMutualLoaded) {
-                        console.warn("Mutual data slow, forcing check...");
-                        isMutualLoaded = true; // Force true to unblock
-                        checkIncomingShare();
-                    }
-                }, 2000);
-            } else if (user) {
-                switchLoginState(false);
-            }
-        });
-
-        // --- Firestore ---
+        // Firestore Logic
         function getCollections() {
             if (!currentWorkspaceId) return null;
             return {
@@ -139,61 +124,80 @@
                 }
                 if (!isMutualLoaded) {
                     isMutualLoaded = true;
-                    checkIncomingShare(); // Data ready, check share
+                    checkIncomingShare(); 
                 }
             });
+            document.getElementById('workspace-id-display').textContent = currentWorkspaceId;
         }
 
-        // --- Data Operations ---
-        const saveTaskToCloud = async (task) => {
+        // Data Operations
+        async function saveTaskToCloud(task) {
             if (!currentUser || !currentWorkspaceId) return;
             const cols = getCollections();
             await addDoc(cols.tasks, { ...task, createdAt: Date.now(), executed: false, clicks: 0 });
-        };
+        }
         window.saveTaskToCloud = saveTaskToCloud;
 
-        const updateTaskInCloud = async (id, data) => {
+        async function updateTaskInCloud(id, data) {
             if (!currentUser || !currentWorkspaceId) return;
             const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_tasks`, id);
             await updateDoc(docRef, data);
-        };
+        }
         window.updateTaskInCloud = updateTaskInCloud;
 
-        const deleteTaskFromCloud = async (id) => {
+        async function deleteTaskFromCloud(id) {
             if (!currentUser || !currentWorkspaceId) return;
             const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_tasks`, id);
             await deleteDoc(docRef);
-        };
+        }
         window.deleteTaskFromCloud = deleteTaskFromCloud;
 
-        const saveTimerToCloud = async (timer) => {
+        async function saveTimerToCloud(timer) {
             if (!currentUser || !currentWorkspaceId) return;
             const cols = getCollections();
             await addDoc(cols.timers, { ...timer, endTime: timer.endTime, createdAt: Date.now() });
-        };
+        }
         window.saveTimerToCloud = saveTimerToCloud;
 
-        const deleteTimerFromCloud = async (id) => {
+        async function deleteTimerFromCloud(id) {
             if (!currentUser || !currentWorkspaceId) return;
             const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_timers`, id);
             await deleteDoc(docRef);
-        };
+        }
         window.deleteTimerFromCloud = deleteTimerFromCloud;
 
-        const saveMutualToCloud = async (data) => {
+        async function saveMutualToCloud(data) {
              if (!currentUser || !currentWorkspaceId) return;
              const cols = getCollections();
              await setDoc(cols.mutualDoc, data, { merge: true });
-        };
+        }
         window.saveMutualToCloud = saveMutualToCloud;
         
-        const getTrackerData = () => trackerData;
-        window.getTrackerData = getTrackerData;
-        
-        const getTimerData = () => timerData;
-        window.getTimerData = getTimerData;
+        window.getTrackerData = () => trackerData;
+        window.getTimerData = () => timerData;
 
+        // --- 2. Auth State Listener (Execute Logic) ---
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user && currentWorkspaceId) {
+                switchLoginState(true);
+                initFirestoreListeners();
+                
+                // Safety check for share intent
+                setTimeout(() => {
+                    if (!isMutualLoaded) {
+                        isMutualLoaded = true;
+                        checkIncomingShare();
+                    }
+                }, 2000);
+            } else if (user) {
+                switchLoginState(false);
+            }
+        });
+
+        // --- 3. Start ---
         initAuth();
+
     </script>
 
     <style>
@@ -412,7 +416,7 @@
         if (savedDelay) globalDelayInput.value = savedDelay;
         globalDelayInput.addEventListener('input', (e) => localStorage.setItem('dashboard-global-delay', e.target.value));
 
-        const switchView = (viewName) => {
+        function switchView(viewName) {
             if (viewName === 'timer') {
                 viewTimer.classList.remove('hidden'); viewTracker.classList.add('hidden');
                 btnTimer.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0";
@@ -422,12 +426,12 @@
                 btnTracker.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center gap-1 shrink-0";
                 btnTimer.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all text-dark-subtext hover:text-white flex items-center gap-1 shrink-0";
             }
-        };
+        }
         window.switchView = switchView;
 
-        const focusNext = (currentId) => {
+        function focusNext(currentId) {
             if (currentId === 't-h') inputM.focus(); else if (currentId === 't-m') inputS.focus(); else if (currentId === 't-s') btnSubmit.focus();
-        };
+        }
         [inputH, inputM, inputS].forEach(input => {
             input.addEventListener('focus', function() { this.select(); });
             input.addEventListener('input', function() { if (this.id !== 't-h' && this.value.length >= 2) focusNext(this.id); });
@@ -435,84 +439,84 @@
         });
 
         // --- Logic ---
-        const extractUrl = (text) => { const m = text.match(/(https?:\/\/[^\s]+)/); return m ? m[0] : text; };
+        function extractUrl(text) { const m = text.match(/(https?:\/\/[^\s]+)/); return m ? m[0] : text; }
 
-        const pasteToMutual = async (inputId, name) => {
+        async function pasteToMutual(inputId, name) {
             try {
                 const text = await navigator.clipboard.readText();
                 const cleanUrl = extractUrl(text);
                 document.getElementById(inputId).value = cleanUrl;
                 updateMutualUrl(name, cleanUrl);
             } catch (err) { alert('請手動貼上'); }
-        };
+        }
         window.pasteToMutual = pasteToMutual;
 
-        const pasteToUrl = async () => {
+        async function pasteToUrl() {
             try {
                 const text = await navigator.clipboard.readText();
                 const cleanUrl = extractUrl(text);
                 const el = document.getElementById('modal-url'); el.value = cleanUrl; el.focus();
                 el.classList.add('border-green-500'); setTimeout(() => el.classList.remove('border-green-500'), 500);
             } catch (err) { alert('請手動貼上'); }
-        };
+        }
         window.pasteToUrl = pasteToUrl;
 
         // Mutual Logic
         const mutualModalEl = document.getElementById('mutual-modal'), mutualListEl = document.getElementById('mutual-list'), mutualSettingsEl = document.getElementById('mutual-settings');
         const mutualNamesInput = document.getElementById('mutual-names-input'), mutualTargetInput = document.getElementById('mutual-target-input'), mutualHelperButtonsEl = document.getElementById('mutual-helper-buttons');
 
-        const saveMutual = () => window.saveMutualToCloud(window.mutualData);
+        function saveMutual() { window.saveMutualToCloud(window.mutualData); }
         window.saveMutual = saveMutual;
 
-        const openMutualModal = () => { renderMutualList(); mutualSettingsEl.classList.add('hidden'); mutualListEl.classList.remove('hidden'); mutualModalEl.classList.remove('hidden'); lucide.createIcons(); };
+        function openMutualModal() { renderMutualList(); mutualSettingsEl.classList.add('hidden'); mutualListEl.classList.remove('hidden'); mutualModalEl.classList.remove('hidden'); lucide.createIcons(); }
         window.openMutualModal = openMutualModal;
 
-        const closeMutualModal = () => mutualModalEl.classList.add('hidden');
+        function closeMutualModal() { mutualModalEl.classList.add('hidden'); }
         window.closeMutualModal = closeMutualModal;
 
-        const toggleMutualSettings = () => { if (mutualSettingsEl.classList.contains('hidden')) { mutualSettingsEl.classList.remove('hidden'); mutualListEl.classList.add('hidden'); mutualNamesInput.value = (window.mutualData.names || []).join('\n'); mutualTargetInput.value = window.mutualData.target || 3; document.getElementById('target-display').textContent = window.mutualData.target || 3; } else { mutualSettingsEl.classList.add('hidden'); mutualListEl.classList.remove('hidden'); } };
+        function toggleMutualSettings() { if (mutualSettingsEl.classList.contains('hidden')) { mutualSettingsEl.classList.remove('hidden'); mutualListEl.classList.add('hidden'); mutualNamesInput.value = (window.mutualData.names || []).join('\n'); mutualTargetInput.value = window.mutualData.target || 3; document.getElementById('target-display').textContent = window.mutualData.target || 3; } else { mutualSettingsEl.classList.add('hidden'); mutualListEl.classList.remove('hidden'); } }
         window.toggleMutualSettings = toggleMutualSettings;
         
-        const saveMutualConfig = () => {
+        function saveMutualConfig() {
             const newNames = mutualNamesInput.value.split('\n').map(s => s.trim()).filter(s => s);
             if (!newNames.length) return alert('請至少輸入一個名字');
             const newUsers = {};
             newNames.forEach(n => { newUsers[n] = window.mutualData.users[n] || { url: '', history: [], todayHelper: null }; });
             window.mutualData.names = newNames; window.mutualData.users = newUsers; window.mutualData.target = parseInt(mutualTargetInput.value) || 3;
             saveMutual(); toggleMutualSettings(); renderMutualList();
-        };
+        }
         window.saveMutualConfig = saveMutualConfig;
 
-        const updateMutualUrl = (name, url) => {
+        function updateMutualUrl(name, url) {
             if (!window.mutualData.users[name]) window.mutualData.users[name] = { url: '', history: [], todayHelper: null };
             window.mutualData.users[name].url = url.trim();
             saveMutual();
-        };
+        }
         window.updateMutualUrl = updateMutualUrl;
 
-        const toggleHistory = (target, helper) => {
+        function toggleHistory(target, helper) {
             const user = window.mutualData.users[target]; if (!user) return;
             const idx = user.history.indexOf(helper);
             if (idx > -1) { user.history.splice(idx, 1); if (user.todayHelper === helper) user.todayHelper = null; } else { user.history.push(helper); user.todayHelper = helper; }
             saveMutual(); renderMutualList();
-        };
+        }
         window.toggleHistory = toggleHistory;
 
-        const markAllAsHelpedBy = (helper) => {
+        function markAllAsHelpedBy(helper) {
             if(!confirm(`確定今天由「${helper}」幫大家簽到嗎？`)) return;
             (window.mutualData.names||[]).forEach(t => { if (t !== helper && window.mutualData.users[t]) { if (!window.mutualData.users[t].history.includes(helper)) window.mutualData.users[t].history.push(helper); window.mutualData.users[t].todayHelper = helper; } });
             saveMutual(); renderMutualList();
-        };
+        }
         window.markAllAsHelpedBy = markAllAsHelpedBy;
 
-        const resetRound = () => {
+        function resetRound() {
             if(!confirm("確定要清空所有人的今日簽到紀錄嗎？")) return;
             (window.mutualData.names||[]).forEach(n => { if(window.mutualData.users[n]) { window.mutualData.users[n].todayHelper = null; window.mutualData.users[n].history = []; } });
             saveMutual(); renderMutualList();
-        };
+        }
         window.resetRound = resetRound;
 
-        const renderMutualList = () => {
+        function renderMutualList() {
             const d = window.mutualData; const names = d.names || [];
             mutualHelperButtonsEl.innerHTML = names.map(n => `<button onclick="markAllAsHelpedBy('${n}')" class="px-3 py-1 bg-dark-card border border-dark-border rounded text-xs font-bold hover:bg-blue-600 hover:text-white transition-colors">${n}</button>`).join('');
             mutualListEl.innerHTML = names.map(n => {
@@ -543,14 +547,14 @@
                 </div>`;
             }).join('');
             lucide.createIcons();
-        };
+        }
         window.renderMutualList = renderMutualList;
 
         // --- Tracker Logic ---
         let editingId = null; let selectedTrackerIds = new Set();
         const listEl = document.getElementById('tracker-list'), modalEl = document.getElementById('tracker-modal');
 
-        const checkScheduledTasks = (now) => {
+        function checkScheduledTasks(now) {
             const hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
             window.getTrackerData().forEach(l => {
                 if (l.schedule === hm && !l.executed) {
@@ -559,27 +563,27 @@
                     if(!win) { popupWarning.classList.remove('hidden'); popupWarningIcon.classList.remove('hidden'); }
                 }
             });
-        };
+        }
 
-        const toggleTrackerSelection = (id) => { if (selectedTrackerIds.has(id)) selectedTrackerIds.delete(id); else selectedTrackerIds.add(id); renderTracker(); };
+        function toggleTrackerSelection(id) { if (selectedTrackerIds.has(id)) selectedTrackerIds.delete(id); else selectedTrackerIds.add(id); renderTracker(); }
         window.toggleTrackerSelection = toggleTrackerSelection;
 
-        const toggleSelectAll = () => { const all = window.getTrackerData().map(l=>l.id); if (all.every(id=>selectedTrackerIds.has(id))) selectedTrackerIds.clear(); else all.forEach(id=>selectedTrackerIds.add(id)); renderTracker(); };
+        function toggleSelectAll() { const all = window.getTrackerData().map(l=>l.id); if (all.every(id=>selectedTrackerIds.has(id))) selectedTrackerIds.clear(); else all.forEach(id=>selectedTrackerIds.add(id)); renderTracker(); }
         window.toggleSelectAll = toggleSelectAll;
 
-        const deleteSelectedTasks = () => { if(selectedTrackerIds.size && confirm('確定刪除？')) { selectedTrackerIds.forEach(id=>window.deleteTaskFromCloud(id)); selectedTrackerIds.clear(); } };
+        function deleteSelectedTasks() { if(selectedTrackerIds.size && confirm('確定刪除？')) { selectedTrackerIds.forEach(id=>window.deleteTaskFromCloud(id)); selectedTrackerIds.clear(); } }
         window.deleteSelectedTasks = deleteSelectedTasks;
         
-        const quickPaste = async (idx) => {
+        async function quickPaste(idx) {
             try { const text = await navigator.clipboard.readText(); const clean = extractUrl(text); const data = window.getTrackerData(); window.updateTaskInCloud(data[idx].id, { url: clean }); } 
             catch(e) { const m = prompt('手動貼上:'); if(m) window.updateTaskInCloud(window.getTrackerData()[idx].id, { url: extractUrl(m) }); }
-        };
+        }
         window.quickPaste = quickPaste;
 
-        const clearTrackerUrl = (id) => { if(confirm('清除連結？')) window.updateTaskInCloud(id, { url: '' }); };
+        function clearTrackerUrl(id) { if(confirm('清除連結？')) window.updateTaskInCloud(id, { url: '' }); }
         window.clearTrackerUrl = clearTrackerUrl;
 
-        const renderTracker = () => {
+        function renderTracker() {
             const data = window.getTrackerData(); const empty = document.getElementById('tracker-empty');
             if(!data.length) { listEl.innerHTML = ''; empty.classList.remove('hidden'); return; }
             empty.classList.add('hidden');
@@ -607,24 +611,24 @@
                 </div>`;
             }).join('');
             lucide.createIcons();
-        };
+        }
         window.renderTracker = renderTracker;
 
-        const openUrl = (url) => { if(!url) return; const win = window.open(url.startsWith('http')?url:'https://'+url, '_blank'); if(!win) alert('Pop-up Blocked'); };
+        function openUrl(url) { if(!url) return; const win = window.open(url.startsWith('http')?url:'https://'+url, '_blank'); if(!win) alert('Pop-up Blocked'); }
         window.openUrl = openUrl;
 
-        const saveTrackerTask = () => {
+        function saveTrackerTask() {
             const name = document.getElementById('modal-name').value.trim(); const raw = document.getElementById('modal-url').value.trim(); const sch = document.getElementById('modal-schedule').value;
             if(!name) return; const clean = extractUrl(raw); const data = { name, url: clean, schedule: sch || null };
             if(editingId) window.updateTaskInCloud(editingId, { ...data, executed: false }); else window.saveTaskToCloud(data);
             modalEl.classList.add('hidden');
-        };
+        }
         window.saveTrackerTask = saveTrackerTask;
 
-        const closeTrackerModal = () => { modalEl.classList.add('hidden'); editingId=null; };
+        function closeTrackerModal() { modalEl.classList.add('hidden'); editingId=null; }
         window.closeTrackerModal = closeTrackerModal;
 
-        const openTrackerModal = () => {
+        function openTrackerModal() {
             editingId = null;
             document.getElementById('modal-title').innerHTML = `<i data-lucide="plus" class="w-5 h-5 text-emerald-400"></i><span>New Task</span>`;
             document.getElementById('modal-name').value = '';
@@ -632,10 +636,10 @@
             document.getElementById('modal-schedule').value = ''; 
             modalEl.classList.remove('hidden');
             lucide.createIcons();
-        };
+        }
         window.openTrackerModal = openTrackerModal;
 
-        const editTracker = (idx) => {
+        function editTracker(idx) {
             const data = window.getTrackerData();
             const item = data[idx];
             editingId = item.id; // Store Doc ID
@@ -645,16 +649,16 @@
             document.getElementById('modal-schedule').value = item.schedule || ''; 
             modalEl.classList.remove('hidden');
             lucide.createIcons();
-        };
+        }
         window.editTracker = editTracker;
 
-        const deleteTracker = (idx) => {
+        function deleteTracker(idx) {
             const data = window.getTrackerData();
             if(confirm('Delete this routine?')) {
                 window.deleteTaskFromCloud(data[idx].id);
                 selectedTrackerIds.delete(data[idx].id);
             }
-        };
+        }
         window.deleteTracker = deleteTracker;
 
         // --- SHORTCUT INTENT LOGIC (AUTO-ROUTE) ---
@@ -689,7 +693,7 @@
             document.body.appendChild(t); lucide.createIcons(); setTimeout(()=>t.remove(), 3000);
         }
         
-        const updateTimerLoop = () => {
+        function updateTimerLoop() {
             const now = new Date();
             headerTime.textContent = formatTimeWithSeconds(now);
             headerDate.textContent = getTaipeiDate();
