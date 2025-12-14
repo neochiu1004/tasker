@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V7.0 (Offline)</title>
+    <title>Command Center V7.2 (分頁模式)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -29,13 +29,18 @@
 <body class="min-h-screen flex flex-col items-center">
 
     <!-- MAIN APP -->
-    <!-- 離線版本：移除登入畫面，應用程式直接啟動 -->
     <div id="main-app" class="w-full max-w-lg mx-auto space-y-6 p-4 md:p-8 pb-24">
         
         <!-- Header -->
         <header class="flex flex-col gap-3 bg-dark-card border border-dark-border p-3 rounded-xl shadow-lg relative overflow-hidden">
-            <div class="absolute top-2 right-2 px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext font-mono" title="離線模式">
-                OFFLINE
+            <div class="absolute top-2 right-2 flex items-center gap-2">
+                <!-- Data Management Button -->
+                <button onclick="openDataManagementModal()" class="px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext hover:text-white hover:bg-white/10 transition-colors flex items-center gap-1 group" title="資料管理 (備份/還原)">
+                    <i data-lucide="database" class="w-3 h-3 group-hover:text-amber-400"></i>
+                </button>
+                <span class="px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext font-mono" title="離線模式">
+                    OFFLINE
+                </span>
             </div>
 
             <div class="flex justify-between items-center mt-1">
@@ -52,17 +57,16 @@
                         </div>
                     </div>
                 </div>
-                <div id="popup-warning-icon" class="hidden text-amber-500 animate-pulse mr-12" title="Popups blocked"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
             </div>
 
-            <!-- Button Switcher -->
+            <!-- Button Switcher: Use switchView() -->
             <div class="flex bg-dark-bg p-1 rounded-lg border border-dark-border overflow-x-auto no-scrollbar">
-                <button id="btn-view-tracker" class="flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1"><i data-lucide="list-todo" class="w-3 h-3"></i> 任務</button>
-                <button onclick="openMutualModal()" class="flex-1 ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center justify-center gap-1"><i data-lucide="users" class="w-3 h-3"></i> 互助</button>
+                <button id="btn-view-tracker" onclick="switchView('tracker')" class="flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1"><i data-lucide="list-todo" class="w-3 h-3"></i> 任務</button>
+                <button id="btn-view-mutual" onclick="switchView('mutual')" class="flex-1 ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center justify-center gap-1"><i data-lucide="users" class="w-3 h-3"></i> 互助</button>
             </div>
         </header>
 
-        <!-- ==================== TRACKER VIEW ==================== -->
+        <!-- ==================== TRACKER VIEW (Default) ==================== -->
         <div id="view-tracker" class="view-section space-y-6">
             <div class="flex justify-between items-end">
                 <h2 class="text-sm font-bold text-dark-subtext tracking-wider uppercase whitespace-nowrap mr-2">日常任務清單</h2>
@@ -72,24 +76,38 @@
                 </div>
             </div>
             
-            <div id="popup-warning" class="hidden bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex items-start gap-3">
-                <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0"></i>
-                <div class="text-xs text-amber-200">
-                    <strong class="block mb-1 text-amber-400">彈出視窗被封鎖</strong>
-                    請在瀏覽器設定中允許本網站的彈出視窗。
-                    <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="block mt-2 underline text-amber-400/70 hover:text-amber-400">關閉</button>
-                </div>
-            </div>
-
             <div id="tracker-list" class="space-y-3 pb-8"></div>
             <div id="tracker-empty" class="py-12 text-center opacity-40 select-none hidden">
                 <i data-lucide="cloud-off" class="w-12 h-12 mx-auto mb-3 text-dark-subtext opacity-50 block"></i>
                 <p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">目前沒有任務</p>
             </div>
         </div>
+        
+        <!-- ==================== MUTUAL VIEW (New Section) ==================== -->
+        <div id="view-mutual" class="view-section space-y-6 hidden">
+            <div class="flex justify-between items-start mb-4 shrink-0">
+                <div>
+                    <h2 class="text-sm font-bold text-dark-subtext tracking-wider uppercase mb-1 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-purple-400"></i> 互助簽到</h2>
+                    <p class="text-xs text-dark-subtext">資料儲存於本地瀏覽器，累計紀錄不會清空。</p>
+                </div>
+                <div class="flex gap-2">
+                     <button onclick="openMutualSettingsModal()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10" title="設定"><i data-lucide="settings" class="w-5 h-5"></i></button>
+                     <button onclick="showResetMenu()" class="text-dark-subtext hover:text-orange-400 p-1 rounded hover:bg-white/10" title="清空選項"><i data-lucide="rotate-ccw" class="w-5 h-5"></i></button>
+                </div>
+            </div>
+            
+            <!-- Quick Helper and List moved from the old modal -->
+            <div id="mutual-quick-helper" class="bg-dark-input/50 rounded-lg p-3 border border-dark-border shrink-0">
+                <p class="text-[10px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-1"><i data-lucide="zap" class="w-3 h-3"></i> 一鍵標記 (點擊標記所有人已被此人幫助)</p>
+                <div id="mutual-helper-buttons" class="flex flex-wrap gap-2"></div>
+            </div>
+            <div id="mutual-list" class="space-y-4 overflow-y-auto no-scrollbar pb-2"></div>
+        </div>
+
     </div>
 
     <!-- FAB -->
+    <!-- FAB只在任務頁面顯示，因此使用switchView('tracker')來判斷是否隱藏 -->
     <button id="fab-new-task" onclick="openTrackerModal()" class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"><i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i></button>
 
     <!-- Tracker Modal -->
@@ -98,7 +116,7 @@
             <h3 id="modal-title" class="text-lg font-bold text-white mb-6 flex items-center gap-2"><i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>編輯任務</span></h3>
             <div class="space-y-4">
                 <div><label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">名稱</label><input type="text" id="modal-name" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none transition-colors"></div>
-                <!-- 移除使用網址添加任務功能 (要求 2) -->
+                <!-- URL 欄位保留，用於手動輸入連結 -->
                 <div>
                     <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">URL (點擊後開啟)</label>
                     <div class="flex gap-2">
@@ -119,28 +137,25 @@
         </div>
     </div>
 
-    <!-- Mutual Modal -->
-    <div id="mutual-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity overflow-y-auto">
-        <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-lg p-6 relative max-h-[90vh] flex flex-col">
-            <div class="flex justify-between items-start mb-4 shrink-0">
-                <div><h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-purple-400"></i><span>互助簽到 (離線)</span></h3><p class="text-xs text-dark-subtext mt-1">資料儲存於本地瀏覽器，不會同步</p></div>
-                <div class="flex gap-2">
-                     <button onclick="toggleMutualSettings()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10" title="設定"><i data-lucide="settings" class="w-5 h-5"></i></button>
-                     <button onclick="showResetMenu()" class="text-dark-subtext hover:text-orange-400 p-1 rounded hover:bg-white/10" title="清空選項"><i data-lucide="rotate-ccw" class="w-5 h-5"></i></button>
-                     <button onclick="closeMutualModal()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10" title="關閉"><i data-lucide="x" class="w-5 h-5"></i></button>
+    <!-- Mutual Settings Modal (Moved out of the main view) -->
+    <div id="mutual-settings-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity overflow-y-auto">
+        <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 relative max-h-[90vh] flex flex-col">
+            <h3 class="text-lg font-bold text-white mb-6 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5 text-purple-400"></i><span>互助設定</span></h3>
+            <div class="flex-1 flex flex-col space-y-4">
+                <div>
+                    <label class="text-xs font-bold text-white uppercase mb-2 block flex justify-between"><span>目標次數 (完成一輪所需互助人數)</span><span class="text-emerald-400 font-mono" id="target-display">3</span></label>
+                    <input type="number" id="mutual-target-input" value="3" min="1" class="w-full bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none transition-colors">
                 </div>
-            </div>
-            <div id="mutual-settings" class="hidden flex-1 flex flex-col mb-4 overflow-y-auto no-scrollbar">
-                <div class="bg-dark-card border border-dark-border rounded-lg p-4 flex-1 space-y-4">
-                    <div><label class="text-xs font-bold text-white uppercase mb-2 block flex justify-between"><span>目標次數 (完成一輪所需互助人數)</span><span class="text-emerald-400 font-mono" id="target-display">3</span></label><input type="number" id="mutual-target-input" value="3" min="1" class="w-full bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none transition-colors"></div>
-                    <div><label class="text-xs font-bold text-white uppercase mb-2 block">編輯名單 (每行一個)</label><textarea id="mutual-names-input" class="w-full h-32 bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none resize-none" placeholder="Name 1&#10;Name 2"></textarea></div>
-                    <button onclick="saveMutualConfig()" class="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg transition-colors shadow-lg">儲存設定</button>
+                <div>
+                    <label class="text-xs font-bold text-white uppercase mb-2 block">編輯名單 (每行一個)</label>
+                    <textarea id="mutual-names-input" class="w-full h-32 bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none resize-none" placeholder="Name 1&#10;Name 2"></textarea>
                 </div>
+                <button onclick="saveMutualConfig()" class="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg transition-colors shadow-lg">儲存設定</button>
+                <button onclick="closeMutualSettingsModal()" class="w-full py-2 text-dark-subtext hover:text-white font-bold rounded-lg transition-colors">取消</button>
             </div>
-            <div id="mutual-quick-helper" class="mb-4 bg-dark-input/50 rounded-lg p-3 border border-dark-border shrink-0"><p class="text-[10px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-1"><i data-lucide="zap" class="w-3 h-3"></i> 一鍵標記 (點擊標記所有人已被此人幫助)</p><div id="mutual-helper-buttons" class="flex flex-wrap gap-2"></div></div>
-            <div id="mutual-list" class="space-y-4 overflow-y-auto no-scrollbar flex-1 pr-1 pb-2"></div>
         </div>
     </div>
+
 
     <!-- Reset Menu Modal -->
     <div id="reset-menu-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity">
@@ -152,6 +167,29 @@
             </div>
         </div>
     </div>
+    
+    <!-- Data Management Modal -->
+    <div id="data-management-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity">
+        <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
+            <h3 class="text-lg font-bold text-white mb-6 flex items-center gap-2"><i data-lucide="database" class="w-5 h-5 text-amber-400"></i><span>資料管理 (備份/還原)</span></h3>
+            <div class="space-y-4">
+                <div class="bg-dark-card border border-dark-border rounded-lg p-4">
+                    <h4 class="text-sm font-bold text-white mb-2">匯出備份 (Export)</h4>
+                    <p class="text-xs text-dark-subtext mb-3">將任務和互助資料備份到 JSON 檔案。</p>
+                    <button onclick="exportData()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> 下載備份檔案</button>
+                </div>
+
+                <div class="bg-dark-card border border-dark-border rounded-lg p-4">
+                    <h4 class="text-sm font-bold text-white mb-2">匯入還原 (Import)</h4>
+                    <p class="text-xs text-dark-subtext mb-3">上傳備份檔案，將覆蓋當前所有資料。</p>
+                    <input type="file" id="import-file-input" accept=".json" onchange="importData(event)" class="hidden">
+                    <button onclick="document.getElementById('import-file-input').click()" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2"><i data-lucide="upload" class="w-4 h-4"></i> 選擇備份檔案</button>
+                </div>
+            </div>
+            <button onclick="closeDataManagementModal()" class="w-full mt-6 py-2 text-dark-subtext hover:text-white font-bold rounded-lg transition-colors">關閉</button>
+        </div>
+    </div>
+
 
     <!-- APP LOGIC -->
     <script>
@@ -163,6 +201,7 @@
         let mutualData = { target: 3, names: [], users: {} }; 
         let editingId = null; 
         let selectedTrackerIds = new Set();
+        let currentView = 'tracker'; // 初始視圖狀態
         
         // --- 2. LOCAL STORAGE OPERATIONS ---
         
@@ -181,21 +220,24 @@
             if (storedMutual) {
                 try {
                     Object.assign(mutualData, JSON.parse(storedMutual));
+                    // Clean up old properties (like todayHelper) on load
+                    Object.keys(mutualData.users || {}).forEach(name => {
+                        delete mutualData.users[name].todayHelper;
+                    });
                 } catch (e) {
                     console.error("Error loading mutualData from localStorage", e);
-                    // Reset to default on error
                 }
             }
         }
         
         function saveTasks() {
             localStorage.setItem(LOCAL_STORAGE_KEY_TASKS, JSON.stringify(trackerData));
-            renderTracker();
+            if (currentView === 'tracker') renderTracker();
         }
 
         function saveMutualData() {
             localStorage.setItem(LOCAL_STORAGE_KEY_MUTUAL, JSON.stringify(mutualData));
-            renderMutualList();
+            if (currentView === 'mutual') renderMutualList();
         }
         
         // --- 3. HELPER FUNCTIONS ---
@@ -221,13 +263,11 @@
             setTimeout(()=>t.remove(), 4000);
         }
 
+        // 核心修改: 避免彈出警告 (要求 2)
         function openUrl(url) { 
             if(!url) return; 
-            const win = window.open(url.startsWith('http')?url:'https://'+url, '_blank'); 
-            if(!win) {
-                document.getElementById('popup-warning').classList.remove('hidden');
-                document.getElementById('popup-warning-icon').classList.remove('hidden');
-            }
+            // 由於無法控制瀏覽器的彈出視窗攔截，我們直接嘗試開啟，不顯示錯誤。
+            window.open(url.startsWith('http')?url:'https://'+url, '_blank'); 
         }
         window.openUrl = openUrl;
 
@@ -246,7 +286,8 @@
                 return await navigator.clipboard.readText();
             } catch (err) {
                 console.error('Failed to read clipboard', err);
-                alert('無法讀取剪貼簿，請手動貼上 (Ctrl+V)');
+                // 替換 alert()
+                confirm('無法讀取剪貼簿，請手動貼上 (Ctrl+V)');
                 return '';
             }
         }
@@ -260,7 +301,8 @@
                 if(clean) {
                     input.value = clean;
                 } else {
-                    alert('未偵測到有效網址 (需包含 http/https)');
+                    // 替換 alert()
+                    confirm('未偵測到有效網址 (需包含 http/https)');
                 }
                 input.dispatchEvent(new Event('input', { bubbles: true }));
             }
@@ -275,7 +317,8 @@
                 input.value = clean;
                 updateMutualUrl(name, clean);
             } else {
-                alert('未偵測到有效網址');
+                // 替換 alert()
+                confirm('未偵測到有效網址');
             }
         };
 
@@ -292,7 +335,8 @@
                     showToast('已更新連結', 'success');
                 }
             } else {
-                alert('未偵測到有效網址');
+                // 替換 alert()
+                confirm('未偵測到有效網址');
             }
         };
 
@@ -421,7 +465,7 @@
             mutualData.users = newUsers;
             
             saveMutualData();
-            toggleMutualSettings(); 
+            closeMutualSettingsModal(); // 儲存後關閉設定框
             document.getElementById('target-display').textContent = mutualData.target;
             showToast('已儲存互助設定', 'success');
         };
@@ -464,7 +508,7 @@
                     <div class="flex items-center justify-center pl-1 pr-2"><input type="checkbox" class="custom-checkbox" onchange="toggleTrackerSelection('${l.id}')" ${sel?'checked':''}></div>
                     <div class="flex-1 min-w-0"><div class="flex items-center justify-between mb-0.5"><h3 class="font-medium text-sm text-white truncate pr-2">${l.name}</h3>${sched}</div><div class="flex items-center gap-2 h-4">${dots}</div></div>
                     <div class="flex items-center gap-2">
-                        <button onclick="if('${l.url}') openUrl('${l.url}'); else alert('無連結'); window.updateTask('${l.id}', {clicks:((${l.clicks}||0)+1)})" class="bg-blue-600/10 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 flex items-center gap-1">前往 <i data-lucide="external-link" class="w-3 h-3"></i></button>
+                        <button onclick="if('${l.url}') openUrl('${l.url}'); else confirm('無連結'); window.updateTask('${l.id}', {clicks:((${l.clicks}||0)+1)})" class="bg-blue-600/10 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 flex items-center gap-1">前往 <i data-lucide="external-link" class="w-3 h-3"></i></button>
                         <div class="flex flex-col gap-1 border-l border-white/5 pl-2">
                             <button onclick="quickPaste('${l.id}')" class="text-dark-subtext/60 hover:text-emerald-400 p-1" title="貼上覆蓋"><i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i></button>
                             ${l.url ? `<button onclick="clearTrackerUrl('${l.id}')" class="text-dark-subtext/60 hover:text-red-400 p-1" title="清除連結"><i data-lucide="link-2-off" class="w-3.5 h-3.5"></i></button>` : ''}
@@ -519,7 +563,7 @@
                     return `<button onclick="toggleHistory('${n}', '${h}')" class="${active ? 'bg-emerald-600 text-white shadow shadow-emerald-900/50 border-emerald-500' : 'bg-dark-input text-dark-subtext border-dark-border'} border px-3 py-1.5 rounded text-xs font-bold transition-all active:scale-95 flex-1 min-w-[3rem]">${h}</button>`;
                 }).join('');
                 
-                // 自己標記自己的按鈕 (如果存在，但點擊會被 toggleHistory 擋住)
+                // 自己標記自己的按鈕 (顯示為不可點擊，並告知原因)
                 const selfHelp = names.filter(x => x === n).map(h => {
                     return `<button class="bg-red-900/10 text-red-400 border border-red-500/30 px-3 py-1.5 rounded text-xs font-bold opacity-50 cursor-not-allowed" title="不能幫自己簽到">${h} (排除)</button>`;
                 }).join('');
@@ -565,6 +609,31 @@
 
 
         // --- 7. MAIN LOGIC & LOOPS ---
+        
+        // NEW: View Switcher
+        function switchView(viewId) {
+            currentView = viewId;
+            const isTracker = viewId === 'tracker';
+
+            document.getElementById('view-tracker').classList.toggle('hidden', !isTracker);
+            document.getElementById('view-mutual').classList.toggle('hidden', isTracker);
+            document.getElementById('fab-new-task').classList.toggle('hidden', !isTracker);
+
+            const btnTracker = document.getElementById('btn-view-tracker');
+            const btnMutual = document.getElementById('btn-view-mutual');
+
+            if (isTracker) {
+                btnTracker.className = 'flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1';
+                btnMutual.className = 'flex-1 ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center justify-center gap-1';
+                renderTracker();
+            } else {
+                btnTracker.className = 'flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30 flex items-center justify-center gap-1';
+                btnMutual.className = 'flex-1 ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600 text-white shadow-sm flex items-center justify-center gap-1';
+                renderMutualList();
+            }
+        }
+        window.switchView = switchView;
+
 
         function checkScheduledTasks(now) {
             const hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
@@ -576,11 +645,8 @@
                         trackerData[index].clicks = (trackerData[index].clicks || 0) + 1;
                         saveTasks();
                     }
-                    const win = window.open(l.url.startsWith('http')?l.url:'https://'+l.url, '_blank');
-                    if(!win) { 
-                        document.getElementById('popup-warning').classList.remove('hidden');
-                        document.getElementById('popup-warning-icon').classList.remove('hidden');
-                    }
+                    // 核心修改: 不再檢查彈出視窗是否被封鎖，直接嘗試開啟 (要求 2)
+                    window.open(l.url.startsWith('http')?l.url:'https://'+l.url, '_blank');
                 }
             });
         }
@@ -633,11 +699,9 @@
             const data = { name, url: clean, schedule: sch || null, executed: false, clicks: 0 };
 
             if(editingId) {
-                // Update existing task
                 updateTask(editingId, { ...data, executed: false }); 
                 showToast('已更新任務', 'success');
             } else {
-                // Add new task
                 const newTask = { id: generateId(), createdAt: Date.now(), ...data };
                 trackerData.unshift(newTask);
                 saveTasks();
@@ -647,40 +711,98 @@
         }
         window.saveTrackerTask = saveTrackerTask;
         
-        // Other Modals
-        window.openMutualModal = () => { 
-            renderMutualList(); 
-            document.getElementById('mutual-settings').classList.add('hidden'); 
-            document.getElementById('mutual-list').classList.remove('hidden'); 
-            document.getElementById('mutual-modal').classList.remove('hidden'); 
-            lucide.createIcons(); 
+        // Mutual Modals
+        // 舊的 open/closeMutualModal 替換為開關設定框
+        window.openMutualSettingsModal = () => {
+             // 載入當前設定值
+            document.getElementById('mutual-names-input').value = (mutualData.names || []).join('\n'); 
+            document.getElementById('mutual-target-input').value = mutualData.target || 3; 
+            document.getElementById('mutual-settings-modal').classList.remove('hidden'); 
+            lucide.createIcons();
         };
-        window.closeMutualModal = () => document.getElementById('mutual-modal').classList.add('hidden');
-        window.toggleMutualSettings = () => { 
-            const s = document.getElementById('mutual-settings'), l = document.getElementById('mutual-list');
-            if (s.classList.contains('hidden')) { 
-                s.classList.remove('hidden'); 
-                l.classList.add('hidden'); 
-                document.getElementById('mutual-names-input').value = (mutualData.names || []).join('\n'); 
-                document.getElementById('mutual-target-input').value = mutualData.target || 3; 
-            } 
-            else { 
-                s.classList.add('hidden'); 
-                l.classList.remove('hidden'); 
-            } 
-        };
+        window.closeMutualSettingsModal = () => document.getElementById('mutual-settings-modal').classList.add('hidden');
+        
         window.showResetMenu = () => document.getElementById('reset-menu-modal').classList.remove('hidden');
         window.closeResetMenu = () => document.getElementById('reset-menu-modal').classList.add('hidden');
 
-        // --- 9. INIT ---
+        // --- 9. DATA MANAGEMENT FUNCTIONS ---
+
+        window.openDataManagementModal = () => {
+            document.getElementById('data-management-modal').classList.remove('hidden');
+            lucide.createIcons();
+        };
+
+        window.closeDataManagementModal = () => {
+            document.getElementById('data-management-modal').classList.add('hidden');
+        };
+
+        function exportData() {
+            const data = {
+                version: '7.2',
+                tasks: localStorage.getItem(LOCAL_STORAGE_KEY_TASKS),
+                mutual: localStorage.getItem(LOCAL_STORAGE_KEY_MUTUAL)
+            };
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+            a.href = url;
+            a.download = `CMD_backup_${dateStr}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('資料已匯出', 'success');
+        }
+        window.exportData = exportData;
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    if (!importedData.tasks || !importedData.mutual) {
+                        confirm('檔案格式錯誤或缺少任務/互助資料');
+                        return;
+                    }
+
+                    // 覆蓋本地儲存
+                    localStorage.setItem(LOCAL_STORAGE_KEY_TASKS, importedData.tasks);
+                    localStorage.setItem(LOCAL_STORAGE_KEY_MUTUAL, importedData.mutual);
+                    
+                    // 重新載入並渲染
+                    loadData();
+                    switchView(currentView); // 保持在當前視圖並刷新
+                    
+                    closeDataManagementModal();
+                    showToast('資料匯入成功！已還原備份。', 'success');
+
+                } catch (error) {
+                    console.error("Import Error:", error);
+                    confirm('匯入失敗，請檢查檔案是否為有效的 JSON 格式。');
+                } finally {
+                    // 清空檔案輸入欄位，以便下次可以再次選擇同一個檔案
+                    event.target.value = '';
+                }
+            };
+            reader.readAsText(file);
+        }
+        window.importData = importData;
+
+
+        // --- 10. INIT ---
         function initApp() {
             loadData();
-            renderTracker();
+            // 初始載入時切換到預設視圖 (tracker)
+            switchView('tracker'); 
             // Start Loop
             setInterval(updateTimerLoop, 1000);
-            
-            // Initial render of mutual list to ensure settings are up-to-date
-            renderMutualList(); 
         }
 
         window.onload = initApp;
