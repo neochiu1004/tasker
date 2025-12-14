@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V7.2 (分頁模式)</title>
+    <title>Command Center V7.3 (分頁模式)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -253,20 +253,17 @@
         function formatTimeWithSeconds(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
         function getTaipeiDate() { return new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 
+        // 移除完成提示 (Toast Notification) 邏輯 (用戶要求)
         function showToast(msg, type='info') {
-            const t = document.createElement('div');
-            const color = type === 'success' ? 'bg-emerald-600 border-emerald-500' : 'bg-blue-600 border-blue-500';
-            t.className = `fixed top-6 left-1/2 -translate-x-1/2 ${color} text-white px-6 py-4 rounded-xl shadow-2xl z-[100] flex items-center gap-3 animate-bounce border-2 backdrop-blur-md`;
-            t.innerHTML = `<i data-lucide="check-circle" class="w-6 h-6"></i><span class="text-base font-bold tracking-wide">${msg}</span>`;
-            document.body.appendChild(t); 
-            lucide.createIcons(); 
-            setTimeout(()=>t.remove(), 4000);
+            // 用戶要求移除完成提示，以避免佔用空間和造成干擾。
+            // 該函式現在為空，所有呼叫將靜默執行。
+            console.log(`[Action Complete] ${msg}`);
+            return;
         }
 
-        // 核心修改: 避免彈出警告 (要求 2)
+        // 核心修改: 避免彈出警告
         function openUrl(url) { 
             if(!url) return; 
-            // 由於無法控制瀏覽器的彈出視窗攔截，我們直接嘗試開啟，不顯示錯誤。
             window.open(url.startsWith('http')?url:'https://'+url, '_blank'); 
         }
         window.openUrl = openUrl;
@@ -738,7 +735,7 @@
 
         function exportData() {
             const data = {
-                version: '7.2',
+                version: '7.3',
                 tasks: localStorage.getItem(LOCAL_STORAGE_KEY_TASKS),
                 mutual: localStorage.getItem(LOCAL_STORAGE_KEY_MUTUAL)
             };
