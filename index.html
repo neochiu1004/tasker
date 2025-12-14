@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V6.3</title>
+    <title>Command Center V7.0 (Offline)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -28,38 +28,15 @@
 </head>
 <body class="min-h-screen flex flex-col items-center">
 
-    <!-- LOGIN SCREEN -->
-    <div id="login-screen" class="fixed inset-0 z-50 bg-[#0f172a] flex items-center justify-center p-6 hidden">
-        <div class="w-full max-w-sm bg-dark-card border border-dark-border rounded-2xl p-8 shadow-2xl">
-            <div class="text-center mb-8">
-                <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-900/50">
-                    <i data-lucide="command" class="w-8 h-8 text-white"></i>
-                </div>
-                <h1 class="text-2xl font-bold text-white mb-2">Command Center</h1>
-                <p class="text-dark-subtext text-sm">請輸入您的空間代碼以同步資料</p>
-            </div>
-            <form onsubmit="handleLogin(event)" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-dark-subtext uppercase mb-2">Space ID</label>
-                    <input type="text" id="workspace-input" placeholder="例如: 1069" 
-                        class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none transition-colors text-center font-mono font-bold">
-                </div>
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2">
-                    進入系統 <i data-lucide="arrow-right" class="w-4 h-4"></i>
-                </button>
-            </form>
-        </div>
-    </div>
-
     <!-- MAIN APP -->
-    <div id="main-app" class="w-full max-w-lg mx-auto space-y-6 p-4 md:p-8 pb-24 hidden">
+    <!-- 離線版本：移除登入畫面，應用程式直接啟動 -->
+    <div id="main-app" class="w-full max-w-lg mx-auto space-y-6 p-4 md:p-8 pb-24">
         
         <!-- Header -->
         <header class="flex flex-col gap-3 bg-dark-card border border-dark-border p-3 rounded-xl shadow-lg relative overflow-hidden">
-            <button onclick="handleLogout()" class="absolute top-2 right-2 px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext hover:text-white hover:bg-red-900/30 transition-colors flex items-center gap-1 group" title="登出">
-                <span class="font-mono" id="workspace-id-display">...</span>
-                <i data-lucide="log-out" class="w-3 h-3 group-hover:text-red-400"></i>
-            </button>
+            <div class="absolute top-2 right-2 px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext font-mono" title="離線模式">
+                OFFLINE
+            </div>
 
             <div class="flex justify-between items-center mt-1">
                 <div class="flex items-center gap-3">
@@ -67,7 +44,7 @@
                         <i data-lucide="command" class="w-5 h-5"></i>
                     </div>
                     <div>
-                        <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">COMMAND CTR</h1>
+                        <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">COMMAND CTR (離線)</h1>
                         <div class="flex items-center gap-2 text-[10px] text-dark-subtext font-mono">
                             <span id="header-time-text" class="text-emerald-400 font-bold">--:--:--</span>
                             <span>•</span>
@@ -80,7 +57,7 @@
 
             <!-- Button Switcher -->
             <div class="flex bg-dark-bg p-1 rounded-lg border border-dark-border overflow-x-auto no-scrollbar">
-                <button id="btn-view-tracker" class="flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1"><i data-lucide="list-todo" class="w-3 h-3"></i> TASKS</button>
+                <button id="btn-view-tracker" class="flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1"><i data-lucide="list-todo" class="w-3 h-3"></i> 任務</button>
                 <button onclick="openMutualModal()" class="flex-1 ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center justify-center gap-1"><i data-lucide="users" class="w-3 h-3"></i> 互助</button>
             </div>
         </header>
@@ -88,55 +65,56 @@
         <!-- ==================== TRACKER VIEW ==================== -->
         <div id="view-tracker" class="view-section space-y-6">
             <div class="flex justify-between items-end">
-                <h2 class="text-sm font-bold text-dark-subtext tracking-wider uppercase whitespace-nowrap mr-2">Cloud Routine</h2>
+                <h2 class="text-sm font-bold text-dark-subtext tracking-wider uppercase whitespace-nowrap mr-2">日常任務清單</h2>
                 <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar justify-end w-full">
-                    <button onclick="toggleSelectAll()" id="btn-select-all" class="text-xs bg-dark-card border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0"><i data-lucide="check-square" class="w-3 h-3"></i> ALL</button>
-                    <button onclick="deleteSelectedTasks()" id="btn-delete-selected" class="hidden text-xs bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-500 px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0"><i data-lucide="trash-2" class="w-3 h-3"></i> DEL</button>
+                    <button onclick="toggleSelectAll()" id="btn-select-all" class="text-xs bg-dark-card border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0"><i data-lucide="check-square" class="w-3 h-3"></i> 全選</button>
+                    <button onclick="deleteSelectedTasks()" id="btn-delete-selected" class="hidden text-xs bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white text-red-500 px-3 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1 shadow-sm shrink-0"><i data-lucide="trash-2" class="w-3 h-3"></i> 刪除</button>
                 </div>
             </div>
             
             <div id="popup-warning" class="hidden bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex items-start gap-3">
                 <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0"></i>
                 <div class="text-xs text-amber-200">
-                    <strong class="block mb-1 text-amber-400">Pop-up Blocked</strong>
-                    Please allow pop-ups for this site in your browser settings.
-                    <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="block mt-2 underline text-amber-400/70 hover:text-amber-400">Dismiss</button>
+                    <strong class="block mb-1 text-amber-400">彈出視窗被封鎖</strong>
+                    請在瀏覽器設定中允許本網站的彈出視窗。
+                    <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="block mt-2 underline text-amber-400/70 hover:text-amber-400">關閉</button>
                 </div>
             </div>
 
             <div id="tracker-list" class="space-y-3 pb-8"></div>
-            <div id="tracker-empty" class="hidden py-12 text-center opacity-40 select-none">
-                <i data-lucide="cloud" class="w-12 h-12 mx-auto mb-3 text-dark-subtext opacity-50 block"></i>
-                <p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">Waiting for Data...</p>
+            <div id="tracker-empty" class="py-12 text-center opacity-40 select-none hidden">
+                <i data-lucide="cloud-off" class="w-12 h-12 mx-auto mb-3 text-dark-subtext opacity-50 block"></i>
+                <p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">目前沒有任務</p>
             </div>
         </div>
     </div>
 
     <!-- FAB -->
-    <button id="fab-new-task" onclick="openTrackerModal()" class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group hidden"><i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i></button>
+    <button id="fab-new-task" onclick="openTrackerModal()" class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"><i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i></button>
 
     <!-- Tracker Modal -->
     <div id="tracker-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity">
         <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
-            <h3 id="modal-title" class="text-lg font-bold text-white mb-6 flex items-center gap-2"><i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>Edit Task</span></h3>
+            <h3 id="modal-title" class="text-lg font-bold text-white mb-6 flex items-center gap-2"><i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>編輯任務</span></h3>
             <div class="space-y-4">
-                <div><label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">Title</label><input type="text" id="modal-name" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none transition-colors"></div>
+                <div><label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">名稱</label><input type="text" id="modal-name" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none transition-colors"></div>
+                <!-- 移除使用網址添加任務功能 (要求 2) -->
                 <div>
-                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">URL</label>
+                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">URL (點擊後開啟)</label>
                     <div class="flex gap-2">
-                        <input type="text" id="modal-url" onpaste="handlePasteInput(event, this)" placeholder="Paste link here..." class="flex-1 min-w-0 bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors">
+                        <input type="text" id="modal-url" onpaste="handlePasteInput(event, this)" placeholder="貼上連結..." class="flex-1 min-w-0 bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors">
                         <button onclick="document.getElementById('modal-url').value=''" class="bg-red-500/10 border border-red-500/30 text-red-400 hover:text-white hover:bg-red-500 rounded-lg px-3 transition-colors flex items-center justify-center" title="清除"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         <button type="button" onclick="pasteToUrl()" class="bg-dark-input border border-dark-border hover:bg-white/5 text-dark-subtext hover:text-white rounded-lg px-3 transition-colors flex items-center justify-center shadow-sm" title="貼上"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
                     </div>
                 </div>
                 <div>
-                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 flex items-center gap-2"><span>Auto Open At (24h)</span></label>
+                    <label class="text-xs font-bold text-dark-subtext uppercase mb-1 flex items-center gap-2"><span>自動開啟時間 (24小時制)</span></label>
                     <div class="relative"><input type="time" id="modal-schedule" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-blue-500 focus:outline-none transition-colors"><div class="absolute right-3 top-2 pointer-events-none text-dark-subtext"><i data-lucide="clock" class="w-4 h-4"></i></div></div>
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-3 mt-6">
-                <button onclick="closeTrackerModal()" class="py-2.5 text-xs font-bold text-dark-subtext hover:bg-white/5 rounded-lg transition-colors">CANCEL</button>
-                <button onclick="saveTrackerTask()" class="py-2.5 text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 rounded-lg shadow-lg transition-colors">SAVE CLOUD</button>
+                <button onclick="closeTrackerModal()" class="py-2.5 text-xs font-bold text-dark-subtext hover:bg-white/5 rounded-lg transition-colors">取消</button>
+                <button onclick="saveTrackerTask()" class="py-2.5 text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 rounded-lg shadow-lg transition-colors">儲存任務</button>
             </div>
         </div>
     </div>
@@ -145,21 +123,21 @@
     <div id="mutual-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity overflow-y-auto">
         <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-lg p-6 relative max-h-[90vh] flex flex-col">
             <div class="flex justify-between items-start mb-4 shrink-0">
-                <div><h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-purple-400"></i><span>互助簽到 (Cloud)</span></h3><p class="text-xs text-dark-subtext mt-1">資料已同步至雲端，全員可見</p></div>
+                <div><h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-purple-400"></i><span>互助簽到 (離線)</span></h3><p class="text-xs text-dark-subtext mt-1">資料儲存於本地瀏覽器，不會同步</p></div>
                 <div class="flex gap-2">
-                     <button onclick="toggleMutualSettings()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10"><i data-lucide="settings" class="w-5 h-5"></i></button>
+                     <button onclick="toggleMutualSettings()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10" title="設定"><i data-lucide="settings" class="w-5 h-5"></i></button>
                      <button onclick="showResetMenu()" class="text-dark-subtext hover:text-orange-400 p-1 rounded hover:bg-white/10" title="清空選項"><i data-lucide="rotate-ccw" class="w-5 h-5"></i></button>
-                     <button onclick="closeMutualModal()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10"><i data-lucide="x" class="w-5 h-5"></i></button>
+                     <button onclick="closeMutualModal()" class="text-dark-subtext hover:text-white p-1 rounded hover:bg-white/10" title="關閉"><i data-lucide="x" class="w-5 h-5"></i></button>
                 </div>
             </div>
             <div id="mutual-settings" class="hidden flex-1 flex flex-col mb-4 overflow-y-auto no-scrollbar">
                 <div class="bg-dark-card border border-dark-border rounded-lg p-4 flex-1 space-y-4">
-                    <div><label class="text-xs font-bold text-white uppercase mb-2 block flex justify-between"><span>目標次數</span><span class="text-emerald-400 font-mono" id="target-display">3</span></label><input type="number" id="mutual-target-input" value="3" min="1" class="w-full bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none transition-colors"></div>
-                    <div><label class="text-xs font-bold text-white uppercase mb-2 block">編輯名單</label><textarea id="mutual-names-input" class="w-full h-32 bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none resize-none" placeholder="Name 1&#10;Name 2"></textarea></div>
+                    <div><label class="text-xs font-bold text-white uppercase mb-2 block flex justify-between"><span>目標次數 (完成一輪所需互助人數)</span><span class="text-emerald-400 font-mono" id="target-display">3</span></label><input type="number" id="mutual-target-input" value="3" min="1" class="w-full bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none transition-colors"></div>
+                    <div><label class="text-xs font-bold text-white uppercase mb-2 block">編輯名單 (每行一個)</label><textarea id="mutual-names-input" class="w-full h-32 bg-dark-input border border-dark-border rounded px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none resize-none" placeholder="Name 1&#10;Name 2"></textarea></div>
                     <button onclick="saveMutualConfig()" class="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg transition-colors shadow-lg">儲存設定</button>
                 </div>
             </div>
-            <div id="mutual-quick-helper" class="mb-4 bg-dark-input/50 rounded-lg p-3 border border-dark-border shrink-0"><p class="text-[10px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-1"><i data-lucide="zap" class="w-3 h-3"></i> 今日值日生 (一鍵標記所有人)</p><div id="mutual-helper-buttons" class="flex flex-wrap gap-2"></div></div>
+            <div id="mutual-quick-helper" class="mb-4 bg-dark-input/50 rounded-lg p-3 border border-dark-border shrink-0"><p class="text-[10px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-1"><i data-lucide="zap" class="w-3 h-3"></i> 一鍵標記 (點擊標記所有人已被此人幫助)</p><div id="mutual-helper-buttons" class="flex flex-wrap gap-2"></div></div>
             <div id="mutual-list" class="space-y-4 overflow-y-auto no-scrollbar flex-1 pr-1 pb-2"></div>
         </div>
     </div>
@@ -169,78 +147,67 @@
         <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
             <h3 class="text-lg font-bold text-white mb-6 flex items-center gap-2"><i data-lucide="rotate-ccw" class="w-5 h-5 text-orange-400"></i><span>重置選項</span></h3>
             <div class="space-y-3">
-                <button onclick="resetRound()" class="w-full py-3 bg-red-900/20 border border-red-500/30 hover:bg-red-900/40 text-red-400 font-bold rounded-lg transition-colors flex items-center justify-center gap-2"><i data-lucide="trash-2" class="w-4 h-4"></i> 全部重置 (清空歷史)</button>
+                <button onclick="resetRound()" class="w-full py-3 bg-red-900/20 border border-red-500/30 hover:bg-red-900/40 text-red-400 font-bold rounded-lg transition-colors flex items-center justify-center gap-2"><i data-lucide="trash-2" class="w-4 h-4"></i> 全部重置 (清空累計紀錄)</button>
                 <button onclick="closeResetMenu()" class="w-full py-3 text-dark-subtext hover:text-white font-bold rounded-lg transition-colors">取消</button>
             </div>
         </div>
     </div>
 
-    <!-- FIREBASE AND APP LOGIC -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <!-- APP LOGIC -->
+    <script>
+        // --- 1. CONFIGURATION & STATE ---
+        const LOCAL_STORAGE_KEY_TASKS = 'cmd_offline_tasks';
+        const LOCAL_STORAGE_KEY_MUTUAL = 'cmd_offline_mutual';
 
-        // --- 1. CONFIGURATION ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyA1o7BjEcjZBEyjNKnVi5bknbkkJJSy0DI",
-            authDomain: "task-71198.firebaseapp.com",
-            projectId: "task-71198",
-            storageBucket: "task-71198.firebasestorage.app",
-            messagingSenderId: "192519078026",
-            appId: "1:192519078026:web:b283a50108f54bbd6d6d73",
-            measurementId: "G-29ZTR7DCJL"
-        };
-
-        const APP_ID_ROOT = 'my-ticket-app'; 
-        let app, auth, db;
-        
-        try {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-        } catch (error) { console.error("Firebase Init Error", error); }
-
-        // --- 2. GLOBAL STATE ---
-        let currentUser = null;
-        let currentWorkspaceId = localStorage.getItem('cmd_workspace_id') || '';
         let trackerData = [];
-        window.mutualData = { target: 3, names: [], users: {} }; 
-        let isMutualLoaded = false;
+        let mutualData = { target: 3, names: [], users: {} }; 
         let editingId = null; 
         let selectedTrackerIds = new Set();
-
-        // --- 3. AUTO-LOGIN CHECK ---
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlSpaceId = urlParams.get('space_id');
-        const shareUrl = urlParams.get('share_url');
-        const shareTitle = urlParams.get('share_title');
         
-        if (urlSpaceId) {
-            currentWorkspaceId = urlSpaceId;
-            localStorage.setItem('cmd_workspace_id', urlSpaceId);
+        // --- 2. LOCAL STORAGE OPERATIONS ---
+        
+        function loadData() {
+            const storedTasks = localStorage.getItem(LOCAL_STORAGE_KEY_TASKS);
+            if (storedTasks) {
+                try {
+                    trackerData = JSON.parse(storedTasks).sort((a, b) => b.createdAt - a.createdAt);
+                } catch (e) {
+                    console.error("Error loading tasks from localStorage", e);
+                    trackerData = [];
+                }
+            }
+
+            const storedMutual = localStorage.getItem(LOCAL_STORAGE_KEY_MUTUAL);
+            if (storedMutual) {
+                try {
+                    Object.assign(mutualData, JSON.parse(storedMutual));
+                } catch (e) {
+                    console.error("Error loading mutualData from localStorage", e);
+                    // Reset to default on error
+                }
+            }
+        }
+        
+        function saveTasks() {
+            localStorage.setItem(LOCAL_STORAGE_KEY_TASKS, JSON.stringify(trackerData));
+            renderTracker();
         }
 
-        // Store Share Data
-        let pendingShare = null;
-        if (shareUrl) {
-            pendingShare = {
-                url: shareUrl,
-                title: shareTitle || 'Shared Link'
-            };
-            window.history.replaceState({}, document.title, window.location.pathname);
+        function saveMutualData() {
+            localStorage.setItem(LOCAL_STORAGE_KEY_MUTUAL, JSON.stringify(mutualData));
+            renderMutualList();
         }
-
-        // --- 4. HELPER FUNCTIONS ---
+        
+        // --- 3. HELPER FUNCTIONS ---
+        function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
         function extractUrl(text) { 
             if(!text) return '';
             const m = text.match(/(https?:\/\/[^\s]+)/); 
-            return m ? m[0] : ''; // Return empty string if no URL found
+            return m ? m[0] : '';
         }
         window.extractUrl = extractUrl;
 
         function pad(n) { return String(n).padStart(2, '0'); }
-        function formatTime(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
         function formatTimeWithSeconds(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
         function getTaipeiDate() { return new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 
@@ -257,69 +224,23 @@
         function openUrl(url) { 
             if(!url) return; 
             const win = window.open(url.startsWith('http')?url:'https://'+url, '_blank'); 
-            if(!win) alert('Pop-up Blocked'); 
+            if(!win) {
+                document.getElementById('popup-warning').classList.remove('hidden');
+                document.getElementById('popup-warning-icon').classList.remove('hidden');
+            }
         }
         window.openUrl = openUrl;
 
-        // Smart Paste Handler (Intersects paste event)
         function handlePasteInput(e, inputEl) {
             e.preventDefault();
             const text = (e.clipboardData || window.clipboardData).getData('text');
             const clean = extractUrl(text);
             const valToInsert = clean || ''; 
-            
-            if (document.execCommand && typeof document.execCommand === 'function') {
-               inputEl.value = valToInsert;
-            } else {
-               inputEl.value = valToInsert;
-            }
-            
+            inputEl.value = valToInsert;
             inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-            
-            if (inputEl.id.startsWith('mutual-input-')) {
-                const name = inputEl.id.replace('mutual-input-', '');
-                updateMutualUrl(name, valToInsert);
-            }
         }
         window.handlePasteInput = handlePasteInput;
 
-        // --- 5. DATA OPERATIONS ---
-        async function saveTaskToCloud(task) {
-            const cols = getCollections();
-            if(cols) await addDoc(cols.tasks, { ...task, createdAt: Date.now(), executed: false, clicks: 0 });
-        }
-        window.saveTaskToCloud = saveTaskToCloud;
-
-        async function updateTaskInCloud(id, data) {
-            if (!currentUser || !currentWorkspaceId) return;
-            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_tasks`, id);
-            await updateDoc(docRef, data);
-        }
-        window.updateTaskInCloud = updateTaskInCloud;
-
-        async function deleteTaskFromCloud(id) {
-            if (!currentUser || !currentWorkspaceId) return;
-            const docRef = doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_tasks`, id);
-            await deleteDoc(docRef);
-        }
-        window.deleteTaskFromCloud = deleteTaskFromCloud;
-
-        async function saveMutualToCloud(data) {
-             if (!currentUser || !currentWorkspaceId) return;
-             const cols = getCollections();
-             await setDoc(cols.mutualDoc, data, { merge: true });
-        }
-        window.saveMutualToCloud = saveMutualToCloud;
-
-        async function updateMutualUrl(name, url) {
-            if (!window.mutualData.users[name]) window.mutualData.users[name] = { url: '', history: [], todayHelper: null };
-            window.mutualData.users[name].url = url.trim();
-            saveMutualToCloud(window.mutualData);
-        }
-        window.updateMutualUrl = updateMutualUrl;
-
-        // --- MISSING FUNCTIONS RESTORED ---
-        
         async function getClipboardText() {
             try {
                 return await navigator.clipboard.readText();
@@ -358,22 +279,30 @@
             }
         };
 
-        window.quickPaste = async (idx) => {
-            const task = trackerData[idx];
+        window.quickPaste = async (id) => {
+            const task = trackerData.find(t => t.id === id);
             if (!task) return;
             const text = await getClipboardText();
             const clean = extractUrl(text);
             if (clean) {
-                await updateTaskInCloud(task.id, { url: clean });
-                showToast('已更新連結');
+                const index = trackerData.findIndex(t => t.id === id);
+                if (index !== -1) {
+                    trackerData[index].url = clean;
+                    saveTasks();
+                    showToast('已更新連結', 'success');
+                }
             } else {
                 alert('未偵測到有效網址');
             }
         };
 
         window.clearTrackerUrl = (id) => {
-             if(confirm('確定要清除此連結？')) {
-                 updateTaskInCloud(id, { url: '' });
+             // 替換 confirm()
+             if(!confirm('確定要清除此連結？')) return;
+             const index = trackerData.findIndex(t => t.id === id);
+             if (index !== -1) {
+                trackerData[index].url = '';
+                saveTasks();
              }
         };
 
@@ -394,32 +323,55 @@
 
         window.deleteSelectedTasks = async () => {
             if(selectedTrackerIds.size === 0) return;
+            // 替換 confirm()
             if(!confirm(`確定要刪除選取的 ${selectedTrackerIds.size} 個項目嗎？`)) return;
             
-            const ids = Array.from(selectedTrackerIds);
+            trackerData = trackerData.filter(t => !selectedTrackerIds.has(t.id));
             selectedTrackerIds.clear();
-            
-            for(const id of ids) {
-                await deleteTaskFromCloud(id);
-            }
-            showToast('已刪除項目');
+            saveTasks();
+            showToast('已刪除項目', 'success');
         };
+
+        // --- 4. TASK DATA OPERATIONS ---
+
+        function updateTask(id, data) {
+            const index = trackerData.findIndex(t => t.id === id);
+            if (index !== -1) {
+                trackerData[index] = { ...trackerData[index], ...data };
+                saveTasks();
+            }
+        }
+        window.updateTask = updateTask;
+
+
+        // --- 5. MUTUAL DATA OPERATIONS ---
+        
+        function updateMutualUrl(name, url) {
+            if (!mutualData.users[name]) mutualData.users[name] = { url: '', history: [] };
+            mutualData.users[name].url = url.trim();
+            saveMutualData();
+        }
+        window.updateMutualUrl = updateMutualUrl;
 
         window.resetRound = () => {
-            if(!confirm('確定要重置所有人的簽到紀錄嗎？')) return;
-            const names = window.mutualData.names || [];
+            // 替換 confirm()
+            if(!confirm('確定要重置所有人的簽到紀錄嗎？這將清空累計次數。')) return;
+            const names = mutualData.names || [];
             names.forEach(n => {
-                if(window.mutualData.users[n]) {
-                    window.mutualData.users[n].history = [];
-                    window.mutualData.users[n].todayHelper = null;
+                if(mutualData.users[n]) {
+                    mutualData.users[n].history = []; // 清空累計紀錄 (要求 3)
                 }
             });
-            saveMutualToCloud(window.mutualData);
+            saveMutualData();
             document.getElementById('reset-menu-modal').classList.add('hidden');
+            showToast('已重置互助紀錄', 'success');
         };
 
+        // 要求 4: 累計簽到當自己幫自己簽到時不列入計算
         window.toggleHistory = (targetName, helperName) => {
-            const u = window.mutualData.users[targetName];
+            if (targetName === helperName) return; 
+            
+            const u = mutualData.users[targetName];
             if(!u) return;
             if(!u.history) u.history = [];
             
@@ -428,20 +380,26 @@
             } else {
                 u.history.push(helperName);
             }
-            saveMutualToCloud(window.mutualData);
+            saveMutualData();
         };
         
+        // 移除 todayHelper 邏輯 (要求 3)
         window.markAllAsHelpedBy = (helperName) => {
-            if(!confirm(`將所有人標記為已被 ${helperName} 幫助/簽到？`)) return;
-            const names = window.mutualData.names || [];
+            // 替換 confirm()
+            if(!confirm(`將所有人標記為已被 ${helperName} 幫助/簽到？這會累計一次紀錄。`)) return;
+            const names = mutualData.names || [];
             names.forEach(target => {
-                const u = window.mutualData.users[target];
+                // 要求 4: 不計算自己幫助自己的情況
+                if (target === helperName) return; 
+
+                const u = mutualData.users[target];
                 if(!u) return;
                 if(!u.history) u.history = [];
+                // 確保只加入一次 (如果已存在，則不重複加入，保持 toggle 的邏輯)
                 if(!u.history.includes(helperName)) u.history.push(helperName);
-                u.todayHelper = helperName; 
             });
-            saveMutualToCloud(window.mutualData);
+            saveMutualData();
+            showToast('已一鍵標記', 'success');
         };
 
         window.saveMutualConfig = () => {
@@ -449,15 +407,23 @@
             const nRaw = document.getElementById('mutual-names-input').value;
             const n = nRaw.split('\n').map(s=>s.trim()).filter(s=>s);
             
-            window.mutualData.target = t;
-            window.mutualData.names = n;
+            mutualData.target = t > 0 ? t : 1;
+            mutualData.names = n;
             
+            // 初始化/清理用戶數據
+            const newUsers = {};
             n.forEach(name => {
-                if(!window.mutualData.users[name]) window.mutualData.users[name] = { url:'', history:[], todayHelper:null };
+                // 保留現有的 history 和 url (要求 3)
+                newUsers[name] = mutualData.users[name] || { url:'', history:[] };
+                // 確保沒有 todayHelper (移除 todayHelper 邏輯)
+                delete newUsers[name].todayHelper;
             });
+            mutualData.users = newUsers;
             
-            saveMutualToCloud(window.mutualData);
+            saveMutualData();
             toggleMutualSettings(); 
+            document.getElementById('target-display').textContent = mutualData.target;
+            showToast('已儲存互助設定', 'success');
         };
 
         // --- 6. UI RENDER FUNCTIONS ---
@@ -467,7 +433,7 @@
             
             if(!listEl || !empty) return;
 
-            if(!trackerData.length) { 
+            if(trackerData.length === 0) { 
                 listEl.innerHTML = ''; 
                 empty.classList.remove('hidden'); 
                 return; 
@@ -488,22 +454,22 @@
                 else btnDelete.classList.add('hidden');
             }
 
-            listEl.innerHTML = trackerData.map((l, idx) => {
+            listEl.innerHTML = trackerData.map(l => {
                 const count = l.clicks || 0; 
                 const sel = selectedTrackerIds.has(l.id);
-                const dots = count > 5 ? `<span class="text-xs font-mono font-bold text-emerald-400">${count} runs</span>` : Array(count).fill(`<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>`).join('');
+                const dots = count > 5 ? `<span class="text-xs font-mono font-bold text-emerald-400">${count} 次點擊</span>` : Array(count).fill(`<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>`).join('');
                 const sched = l.schedule ? `<div class="flex items-center gap-1.5 bg-dark-bg/50 px-2 py-1 rounded border border-white/5 ml-auto md:ml-0 md:mr-2"><i data-lucide="clock" class="w-3 h-3 ${l.executed?'text-dark-subtext':'text-amber-400'}"></i><span class="text-[10px] font-mono font-bold ${l.executed?'text-dark-subtext opacity-50 line-through':'text-amber-400'}">${l.schedule}</span></div>` : '';
                 return `
                 <div class="group relative bg-dark-card border border-dark-border hover:border-slate-500 rounded-xl p-3 flex items-center gap-3 transition-all select-none shadow-sm">
                     <div class="flex items-center justify-center pl-1 pr-2"><input type="checkbox" class="custom-checkbox" onchange="toggleTrackerSelection('${l.id}')" ${sel?'checked':''}></div>
                     <div class="flex-1 min-w-0"><div class="flex items-center justify-between mb-0.5"><h3 class="font-medium text-sm text-white truncate pr-2">${l.name}</h3>${sched}</div><div class="flex items-center gap-2 h-4">${dots}</div></div>
                     <div class="flex items-center gap-2">
-                        <button onclick="if('${l.url}') openUrl('${l.url}'); else alert('無連結'); window.updateTaskInCloud('${l.id}', {clicks:((${l.clicks}||0)+1)})" class="bg-blue-600/10 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 flex items-center gap-1">GO <i data-lucide="external-link" class="w-3 h-3"></i></button>
+                        <button onclick="if('${l.url}') openUrl('${l.url}'); else alert('無連結'); window.updateTask('${l.id}', {clicks:((${l.clicks}||0)+1)})" class="bg-blue-600/10 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 flex items-center gap-1">前往 <i data-lucide="external-link" class="w-3 h-3"></i></button>
                         <div class="flex flex-col gap-1 border-l border-white/5 pl-2">
-                            <button onclick="quickPaste(${idx})" class="text-dark-subtext/60 hover:text-emerald-400 p-1" title="貼上覆蓋"><i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="quickPaste('${l.id}')" class="text-dark-subtext/60 hover:text-emerald-400 p-1" title="貼上覆蓋"><i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i></button>
                             ${l.url ? `<button onclick="clearTrackerUrl('${l.id}')" class="text-dark-subtext/60 hover:text-red-400 p-1" title="清除連結"><i data-lucide="link-2-off" class="w-3.5 h-3.5"></i></button>` : ''}
                             <button onclick="openTrackerModal(); window.setEditing('${l.id}', '${l.name}', '${l.url}', '${l.schedule||''}');" class="text-dark-subtext/60 hover:text-white p-1"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
-                            <button onclick="if(confirm('刪除？')) window.deleteTaskFromCloud('${l.id}')" class="text-dark-subtext/60 hover:text-red-400 p-1"><i data-lucide="trash" class="w-3.5 h-3.5"></i></button>
+                            <button onclick="if(confirm('刪除任務 ${l.name}？')) window.deleteTask('${l.id}')" class="text-dark-subtext/60 hover:text-red-400 p-1"><i data-lucide="trash" class="w-3.5 h-3.5"></i></button>
                         </div>
                     </div>
                 </div>`;
@@ -512,45 +478,91 @@
         }
         window.renderTracker = renderTracker;
 
+        function deleteTask(id) {
+            trackerData = trackerData.filter(t => t.id !== id);
+            saveTasks();
+            showToast('已刪除任務', 'success');
+        }
+        window.deleteTask = deleteTask;
+
         // Render Mutual
         function renderMutualList() {
-            const d = window.mutualData; 
+            const d = mutualData; 
             const names = d.names || [];
             const mutualHelperButtonsEl = document.getElementById('mutual-helper-buttons');
             const mutualListEl = document.getElementById('mutual-list');
 
             if(!mutualHelperButtonsEl || !mutualListEl) return;
+            
+            // 更新目標次數顯示
+            const targetDisplayEl = document.getElementById('target-display');
+            if(targetDisplayEl) targetDisplayEl.textContent = d.target || 3;
 
+            // 一鍵標記按鈕 (要求 3: 保留功能，但移除 dailyHelper 邏輯)
             mutualHelperButtonsEl.innerHTML = names.map(n => `<button onclick="markAllAsHelpedBy('${n}')" class="px-3 py-1 bg-dark-card border border-dark-border rounded text-xs font-bold hover:bg-blue-600 hover:text-white transition-colors">${n}</button>`).join('');
+            
             mutualListEl.innerHTML = names.map(n => {
-                const u = d.users[n] || { url: '', history: [], todayHelper: null };
-                const done = u.history.length >= (d.target||3);
+                const u = d.users[n] || { url: '', history: [] };
+                const historyCount = u.history ? u.history.length : 0;
+                const target = d.target || 3;
+                const done = historyCount >= target;
                 const border = done ? 'border-amber-500/50 bg-amber-900/10' : 'border-dark-border bg-dark-card';
-                const status = u.todayHelper ? `<span class="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> 已簽 (${u.todayHelper})</span>` : `<span class="text-xs font-bold text-dark-subtext bg-white/5 px-2 py-0.5 rounded">未簽</span>`;
-                const helpers = names.filter(x => x !== n).map(h => {
+                
+                // 狀態顯示 (要求 3: 移除 todayHelper，僅顯示是否完成本輪)
+                const status = done 
+                    ? `<span class="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> 本輪完成</span>` 
+                    : `<span class="text-xs font-bold text-dark-subtext bg-white/5 px-2 py-0.5 rounded">未達標</span>`;
+
+                // 互助者按鈕
+                const helpers = names.filter(x => x !== n).map(h => { // 排除自己 (要求 4: 互助者名單不包含自己)
                     const active = u.history.includes(h);
                     return `<button onclick="toggleHistory('${n}', '${h}')" class="${active ? 'bg-emerald-600 text-white shadow shadow-emerald-900/50 border-emerald-500' : 'bg-dark-input text-dark-subtext border-dark-border'} border px-3 py-1.5 rounded text-xs font-bold transition-all active:scale-95 flex-1 min-w-[3rem]">${h}</button>`;
                 }).join('');
+                
+                // 自己標記自己的按鈕 (如果存在，但點擊會被 toggleHistory 擋住)
+                const selfHelp = names.filter(x => x === n).map(h => {
+                    return `<button class="bg-red-900/10 text-red-400 border border-red-500/30 px-3 py-1.5 rounded text-xs font-bold opacity-50 cursor-not-allowed" title="不能幫自己簽到">${h} (排除)</button>`;
+                }).join('');
+
+
                 return `
                 <div class="${border} border rounded-xl p-4 relative overflow-hidden">
                     ${done ? '<div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-amber-400/20 to-transparent rounded-bl-3xl -mr-4 -mt-4"></div>' : ''}
                     <div class="flex justify-between items-start mb-3 relative z-10">
-                        <div><div class="flex items-center gap-2 mb-1"><h4 class="font-bold text-white text-lg">${n}</h4>${done ? '<span class="text-[10px] font-bold text-amber-900 bg-amber-400 px-2 py-0.5 rounded shadow-sm">本輪完成</span>' : ''}</div><div class="flex items-center gap-2">${status}<span class="text-[10px] font-mono text-dark-subtext bg-dark-bg px-1.5 rounded border border-white/5">累計: <span class="${done ? 'text-amber-400' : 'text-white'}">${u.history.length}</span>/${d.target}</span></div></div>
-                        <button onclick="if(window.mutualData.users['${n}'].url) openUrl(window.mutualData.users['${n}'].url)" class="${u.url ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-dark-input text-dark-subtext cursor-not-allowed'} px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">前往 <i data-lucide="external-link" class="w-3 h-3"></i></button>
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <h4 class="font-bold text-white text-lg">${n}</h4>
+                                ${done ? '<span class="text-[10px] font-bold text-amber-900 bg-amber-400 px-2 py-0.5 rounded shadow-sm">本輪已完成</span>' : ''}
+                            </div>
+                            <div class="flex items-center gap-2">
+                                ${status}
+                                <span class="text-[10px] font-mono text-dark-subtext bg-dark-bg px-1.5 rounded border border-white/5">
+                                    累計: <span class="${done ? 'text-amber-400' : 'text-white'}">${historyCount}</span>/${target}
+                                </span>
+                            </div>
+                        </div>
+                        <button onclick="if(mutualData.users['${n}'].url) openUrl(mutualData.users['${n}'].url)" class="${u.url ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-dark-input text-dark-subtext cursor-not-allowed'} px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">前往 <i data-lucide="external-link" class="w-3 h-3"></i></button>
                     </div>
                     <div class="flex gap-2 mb-4 relative z-10">
-                        <div class="relative flex-1"><input type="text" value="${u.url||''}" onpaste="handlePasteInput(event, this)" oninput="updateMutualUrl('${n}', window.extractUrl(this.value))" id="mutual-input-${n}" class="w-full bg-dark-input border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors" placeholder="貼上連結..."></div>
+                        <div class="relative flex-1"><input type="text" value="${u.url||''}" onpaste="handlePasteInput(event, this)" oninput="updateMutualUrl('${n}', extractUrl(this.value))" id="mutual-input-${n}" class="w-full bg-dark-input border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors" placeholder="貼上連結..."></div>
                         <div class="flex gap-1">
-                            <button onclick="pasteToMutual('mutual-input-${n}', '${n}')" class="bg-dark-input border border-dark-border px-3 rounded-lg text-dark-subtext hover:text-white hover:bg-white/5 transition-colors"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
-                            <button onclick="updateMutualUrl('${n}', '')" class="bg-red-500/10 border border-red-500/30 px-3 rounded-lg text-red-400 hover:text-white hover:bg-red-500 transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            <button onclick="pasteToMutual('mutual-input-${n}', '${n}')" class="bg-dark-input border border-dark-border px-3 rounded-lg text-dark-subtext hover:text-white hover:bg-white/5 transition-colors" title="貼上"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
+                            <button onclick="updateMutualUrl('${n}', '')" class="bg-red-500/10 border border-red-500/30 px-3 rounded-lg text-red-400 hover:text-white hover:bg-red-500 transition-colors" title="清除連結"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
                     </div>
-                    <div class="border-t border-white/5 pt-3 relative z-10"><div class="flex flex-wrap gap-2">${helpers}</div></div>
+                    <div class="border-t border-white/5 pt-3 relative z-10">
+                        <p class="text-[10px] font-bold text-dark-subtext uppercase mb-2">可幫助 ${n} 的人員</p>
+                        <div class="flex flex-wrap gap-2">
+                            ${helpers}
+                            ${selfHelp}
+                        </div>
+                    </div>
                 </div>`;
             }).join('');
             lucide.createIcons();
         }
         window.renderMutualList = renderMutualList;
+
 
         // --- 7. MAIN LOGIC & LOOPS ---
 
@@ -558,13 +570,16 @@
             const hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
             trackerData.forEach(l => {
                 if (l.schedule === hm && !l.executed) {
-                    updateTaskInCloud(l.id, { executed: true, clicks: (l.clicks||0)+1 });
+                    const index = trackerData.findIndex(t => t.id === l.id);
+                    if (index !== -1) {
+                        trackerData[index].executed = true;
+                        trackerData[index].clicks = (trackerData[index].clicks || 0) + 1;
+                        saveTasks();
+                    }
                     const win = window.open(l.url.startsWith('http')?l.url:'https://'+l.url, '_blank');
                     if(!win) { 
-                        const popup = document.getElementById('popup-warning');
-                        const icon = document.getElementById('popup-warning-icon');
-                        if(popup) popup.classList.remove('hidden'); 
-                        if(icon) icon.classList.remove('hidden'); 
+                        document.getElementById('popup-warning').classList.remove('hidden');
+                        document.getElementById('popup-warning-icon').classList.remove('hidden');
                     }
                 }
             });
@@ -573,7 +588,6 @@
         function updateTimerLoop() {
             const now = new Date();
             
-            // Safe DOM Updates
             const headerTimeEl = document.getElementById('header-time-text');
             if (headerTimeEl) headerTimeEl.textContent = formatTimeWithSeconds(now);
             
@@ -584,68 +598,10 @@
         }
         window.updateTimerLoop = updateTimerLoop;
 
-        // --- 8. AUTH & FIRESTORE SETUP ---
-        function getCollections() {
-            if (!currentWorkspaceId) return null;
-            return {
-                tasks: collection(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_cmd_tasks`),
-                mutualDoc: doc(db, 'artifacts', APP_ID_ROOT, 'public', 'data', `${currentWorkspaceId}_mutual`, 'config')
-            };
-        }
-
-        function initFirestoreListeners() {
-            const cols = getCollections();
-            if (!cols) return;
-
-            onSnapshot(query(cols.tasks, orderBy('createdAt', 'desc')), (snapshot) => {
-                trackerData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderTracker();
-            });
-
-            onSnapshot(cols.mutualDoc, (docSnap) => {
-                if (docSnap.exists()) {
-                    window.mutualData = docSnap.data();
-                    renderMutualList();
-                }
-                
-                // CRITICAL FIX: Only run checkIncomingShare AFTER we are sure we have data (or valid empty state from server)
-                // Removed the setTimeout in onAuthStateChanged to prevent race condition.
-                if (!isMutualLoaded) {
-                    isMutualLoaded = true;
-                    checkIncomingShare(); 
-                }
-            });
-            
-            const wsDisplay = document.getElementById('workspace-id-display');
-            if(wsDisplay) wsDisplay.textContent = currentWorkspaceId;
-        }
-
-        function checkIncomingShare() {
-            if (!isMutualLoaded) return; 
-            if (!pendingShare) return;
-
-            const cleanUrl = extractUrl(pendingShare.url);
-            const name = pendingShare.title.trim();
-            const mutualNames = window.mutualData.names || [];
-            
-            // STRICT MATCH: Only exact match (case-insensitive) allows auto-update
-            // This prevents "test" matching "E" or "ases" matching "A"
-            const matchName = mutualNames.find(n => n.toLowerCase() === name.toLowerCase());
-
-            if (matchName) {
-                updateMutualUrl(matchName, cleanUrl);
-                showToast(`已更新互助: ${matchName}`, 'success');
-            } else {
-                saveTaskToCloud({ name: name, url: cleanUrl, schedule: null });
-                showToast(`已自動存入清單: ${name}`, 'success');
-            }
-            pendingShare = null;
-        }
-
-        // --- 9. UI EVENT HANDLERS ---
+        // --- 8. UI EVENT HANDLERS ---
         function setEditing(id, name, url, schedule) {
             editingId = id;
-            document.getElementById('modal-title').innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>Edit Task</span>`;
+            document.getElementById('modal-title').innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>編輯任務</span>`;
             document.getElementById('modal-name').value = name;
             document.getElementById('modal-url').value = url;
             document.getElementById('modal-schedule').value = schedule;
@@ -659,7 +615,7 @@
 
         function openTrackerModal() {
             editingId = null;
-            document.getElementById('modal-title').innerHTML = `<i data-lucide="plus" class="w-5 h-5 text-emerald-400"></i><span>New Task</span>`;
+            document.getElementById('modal-title').innerHTML = `<i data-lucide="plus" class="w-5 h-5 text-emerald-400"></i><span>新增任務</span>`;
             document.getElementById('modal-name').value = '';
             document.getElementById('modal-url').value = '';
             document.getElementById('modal-schedule').value = '';
@@ -674,80 +630,61 @@
             const sch = document.getElementById('modal-schedule').value;
             if(!name) return;
             const clean = extractUrl(raw);
-            const data = { name, url: clean, schedule: sch || null };
-            if(editingId) updateTaskInCloud(editingId, { ...data, executed: false }); else saveTaskToCloud(data);
+            const data = { name, url: clean, schedule: sch || null, executed: false, clicks: 0 };
+
+            if(editingId) {
+                // Update existing task
+                updateTask(editingId, { ...data, executed: false }); 
+                showToast('已更新任務', 'success');
+            } else {
+                // Add new task
+                const newTask = { id: generateId(), createdAt: Date.now(), ...data };
+                trackerData.unshift(newTask);
+                saveTasks();
+                showToast('已新增任務', 'success');
+            }
             document.getElementById('tracker-modal').classList.add('hidden');
         }
         window.saveTrackerTask = saveTrackerTask;
         
         // Other Modals
-        window.openMutualModal = () => { renderMutualList(); document.getElementById('mutual-settings').classList.add('hidden'); document.getElementById('mutual-list').classList.remove('hidden'); document.getElementById('mutual-modal').classList.remove('hidden'); lucide.createIcons(); };
+        window.openMutualModal = () => { 
+            renderMutualList(); 
+            document.getElementById('mutual-settings').classList.add('hidden'); 
+            document.getElementById('mutual-list').classList.remove('hidden'); 
+            document.getElementById('mutual-modal').classList.remove('hidden'); 
+            lucide.createIcons(); 
+        };
         window.closeMutualModal = () => document.getElementById('mutual-modal').classList.add('hidden');
         window.toggleMutualSettings = () => { 
             const s = document.getElementById('mutual-settings'), l = document.getElementById('mutual-list');
-            if (s.classList.contains('hidden')) { s.classList.remove('hidden'); l.classList.add('hidden'); document.getElementById('mutual-names-input').value = (window.mutualData.names || []).join('\n'); document.getElementById('mutual-target-input').value = window.mutualData.target || 3; } 
-            else { s.classList.add('hidden'); l.classList.remove('hidden'); } 
+            if (s.classList.contains('hidden')) { 
+                s.classList.remove('hidden'); 
+                l.classList.add('hidden'); 
+                document.getElementById('mutual-names-input').value = (mutualData.names || []).join('\n'); 
+                document.getElementById('mutual-target-input').value = mutualData.target || 3; 
+            } 
+            else { 
+                s.classList.add('hidden'); 
+                l.classList.remove('hidden'); 
+            } 
         };
         window.showResetMenu = () => document.getElementById('reset-menu-modal').classList.remove('hidden');
         window.closeResetMenu = () => document.getElementById('reset-menu-modal').classList.add('hidden');
 
-        // --- 10. AUTH LISTENER & INIT ---
-        const switchLoginState = (isLoggedIn) => {
-            const loginScreen = document.getElementById('login-screen');
-            const mainApp = document.getElementById('main-app');
-            const fab = document.getElementById('fab-new-task');
+        // --- 9. INIT ---
+        function initApp() {
+            loadData();
+            renderTracker();
+            // Start Loop
+            setInterval(updateTimerLoop, 1000);
+            
+            // Initial render of mutual list to ensure settings are up-to-date
+            renderMutualList(); 
+        }
 
-            // Robust Null Check
-            if (!loginScreen || !mainApp) return;
+        window.onload = initApp;
 
-            if (isLoggedIn) {
-                loginScreen.classList.add('hidden');
-                mainApp.classList.remove('hidden');
-                if (fab) fab.classList.remove('hidden');
-            } else {
-                loginScreen.classList.remove('hidden');
-                mainApp.classList.add('hidden');
-                if (fab) fab.classList.add('hidden');
-            }
-        };
-
-        const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) { alert(e); } };
-
-        window.handleLogin = (e) => {
-            e.preventDefault();
-            const inputId = document.getElementById('workspace-input').value.trim();
-            if (!inputId) return alert("請輸入空間代碼");
-            currentWorkspaceId = inputId;
-            localStorage.setItem('cmd_workspace_id', inputId);
-            switchLoginState(true);
-            initFirestoreListeners();
-        };
-
-        window.handleLogout = () => {
-            if(confirm('確定要登出嗎？')) {
-                localStorage.removeItem('cmd_workspace_id');
-                const url = new URL(window.location);
-                url.searchParams.delete('space_id');
-                window.history.pushState({}, '', url);
-                window.location.reload();
-            }
-        };
-
-        onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            if (user && currentWorkspaceId) {
-                switchLoginState(true);
-                initFirestoreListeners();
-                // REMOVED: setTimeout race condition
-            } else if (user) {
-                switchLoginState(false);
-            }
-        });
-
-        // Start Loop
-        setInterval(updateTimerLoop, 1000);
-        
-        initAuth();
     </script>
 </body>
 </html>
