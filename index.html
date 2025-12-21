@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V7.7 (Bubble Mode)</title>
+    <title>Command Center V7.8 (跳轉優化)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -54,7 +54,7 @@
                             <i data-lucide="command" class="w-5 h-5"></i>
                         </div>
                         <div>
-                            <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">COMMAND CTR V7.7</h1>
+                            <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">COMMAND CTR V7.8</h1>
                             <div class="flex items-center gap-2 text-[10px] text-dark-subtext font-mono">
                                 <span id="header-time-text" class="text-emerald-400 font-bold">--:--:--</span>
                                 <span>•</span>
@@ -111,7 +111,7 @@
         </div>
     </div>
 
-    <!-- FAB GROUP with BUBBLE MENU (CR-008) -->
+    <!-- FAB GROUP with BUBBLE MENU -->
     <div class="fixed bottom-6 right-6 z-40 flex flex-col gap-4 items-end">
         
         <!-- Bubble Container -->
@@ -220,7 +220,7 @@
         let editingId = null; 
         let selectedTrackerIds = new Set();
         let currentView = 'tracker'; 
-        let isSmartMenuOpen = false; // CR-008
+        let isSmartMenuOpen = false; 
         
         // --- 2. LOCAL STORAGE OPERATIONS ---
         function loadData() {
@@ -269,7 +269,6 @@
         function formatTimeWithSeconds(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
         function getTaipeiDate() { return new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 
-        // Re-enabled a simple visual toast for the bubble action feedback
         function showToast(msg, type='info') {
             const container = document.getElementById('toast-container');
             if (!container) return;
@@ -287,9 +286,21 @@
             }, 2000);
         }
 
+        // CR-009: Modified openUrl to ensure new tab/no history trap
         function openUrl(url) { 
             if(!url) return; 
-            window.open(url.startsWith('http')?url:'https://'+url, '_blank'); 
+            const finalUrl = url.startsWith('http') ? url : 'https://' + url;
+            
+            // Create a temporary anchor element
+            const a = document.createElement('a');
+            a.href = finalUrl;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer'; // Crucial for security and isolation
+            
+            // Append, click, and remove
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         }
         window.openUrl = openUrl;
 
@@ -508,43 +519,33 @@
             }
         };
 
-        // The core logic for "Click Bubble -> Paste"
         window.assignUrlToUserDirectly = async (name) => {
             let clipboardText = '';
-            
-            // 1. Try Auto Read
             try {
                 clipboardText = await navigator.clipboard.readText();
             } catch (err) {
                 console.log("Clipboard read failed");
             }
 
-            // 2. Extract
             let url = extractUrl(clipboardText);
 
-            // 3. Fallback if failed or empty
             if (!url) {
-                // Use standard prompt as fallback to ensure usability
                 const manualInput = prompt(`無法自動讀取剪貼簿，請貼上要分配給 ${name} 的連結：`);
                 if (manualInput) {
-                    url = extractUrl(manualInput) || manualInput; // Try extract, else take raw
+                    url = extractUrl(manualInput) || manualInput; 
                 }
             }
 
-            // 4. Save or Error
             if (url) {
                 updateMutualUrl(name, url);
                 showToast(`已分配給 ${name}`, 'success');
-                // Close menu after success
                 toggleSmartMenu();
-                // Scroll to view if needed
                 if(currentView !== 'mutual') switchView('mutual');
             } else {
                 showToast('未偵測到有效連結', 'error');
             }
         };
         
-        // Close menu when clicking outside
         document.addEventListener('click', (e) => {
             const container = document.getElementById('smart-menu-container');
             const toggle = document.getElementById('fab-smart-toggle');
@@ -717,7 +718,8 @@
                         trackerData[index].clicks = (trackerData[index].clicks || 0) + 1;
                         saveTasks();
                     }
-                    window.open(l.url.startsWith('http')?l.url:'https://'+l.url, '_blank');
+                    // CR-009: Use new openUrl
+                    window.openUrl(l.url);
                 }
             });
         }
@@ -803,7 +805,7 @@
 
         function exportData() {
             const data = {
-                version: '7.7', // Bumped version
+                version: '7.8', // Bumped version
                 tasks: localStorage.getItem(LOCAL_STORAGE_KEY_TASKS),
                 mutual: localStorage.getItem(LOCAL_STORAGE_KEY_MUTUAL)
             };
