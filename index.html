@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V7.5 (Smart Paste)</title>
+    <title>Command Center V7.7 (Bubble Mode)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -20,6 +20,14 @@
         .custom-checkbox:checked { background-color: #2563eb; border-color: #2563eb; }
         .custom-checkbox:checked::before { transform: scale(1); }
         .scroll-mt-header { scroll-margin-top: 190px; }
+        
+        /* Bubble Animations */
+        @keyframes bubblePop {
+            0% { transform: scale(0) translateY(20px); opacity: 0; }
+            80% { transform: scale(1.1) translateY(0); opacity: 1; }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .bubble-enter { animation: bubblePop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
     </style>
     <script>
         tailwind.config = { darkMode: 'class', theme: { extend: { colors: { dark: { bg: '#0f172a', card: '#1e293b', input: '#334155', border: '#334155', text: '#f8fafc', subtext: '#94a3b8', } } } } }
@@ -46,7 +54,7 @@
                             <i data-lucide="command" class="w-5 h-5"></i>
                         </div>
                         <div>
-                            <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">COMMAND CTR V7.5</h1>
+                            <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">COMMAND CTR V7.7</h1>
                             <div class="flex items-center gap-2 text-[10px] text-dark-subtext font-mono">
                                 <span id="header-time-text" class="text-emerald-400 font-bold">--:--:--</span>
                                 <span>•</span>
@@ -103,35 +111,21 @@
         </div>
     </div>
 
-    <!-- FAB GROUP -->
-    <div class="fixed bottom-6 right-6 z-40 flex flex-col gap-4 items-center">
-        <!-- CR-006: Smart Paste FAB -->
-        <button id="fab-smart-paste" onclick="openSmartPasteMenu()" class="w-12 h-12 bg-purple-600 hover:bg-purple-500 text-white rounded-full shadow-xl shadow-purple-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95" title="快速貼上連結"><i data-lucide="link" class="w-5 h-5"></i></button>
-        <!-- Existing Add Task FAB -->
-        <button id="fab-new-task" onclick="openTrackerModal()" class="w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"><i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i></button>
-    </div>
-
-    <!-- Smart Paste Action Sheet (CR-006) -->
-    <div id="smart-paste-modal" class="fixed inset-0 z-50 hidden flex items-end justify-center sm:items-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm transition-opacity">
-        <div class="bg-dark-bg border-t sm:border border-dark-border rounded-t-2xl sm:rounded-xl shadow-2xl w-full max-w-sm p-6 transform transition-transform animate-slide-up">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="link" class="w-5 h-5 text-purple-400"></i><span>快速分配連結</span></h3>
-                <button onclick="closeSmartPasteMenu()" class="text-dark-subtext hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-            
-            <div class="mb-4">
-                <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">將此連結分配給...</label>
-                <div class="relative">
-                    <input type="text" id="smart-paste-preview" class="w-full bg-dark-input border border-dark-border rounded-lg pl-9 pr-3 py-2 text-white text-sm font-mono focus:border-purple-500 focus:outline-none transition-colors" placeholder="請貼上連結..." oninput="handleSmartInput(this.value)">
-                    <div class="absolute left-3 top-2.5 text-dark-subtext"><i data-lucide="globe" class="w-4 h-4"></i></div>
-                </div>
-                <p id="smart-paste-status" class="text-[10px] text-amber-400 mt-1 h-4"></p>
-            </div>
-
-            <div class="max-h-[50vh] overflow-y-auto no-scrollbar grid grid-cols-2 gap-2" id="smart-paste-list">
-                <!-- User buttons will be injected here -->
-            </div>
+    <!-- FAB GROUP with BUBBLE MENU (CR-008) -->
+    <div class="fixed bottom-6 right-6 z-40 flex flex-col gap-4 items-end">
+        
+        <!-- Bubble Container -->
+        <div id="smart-menu-container" class="flex flex-col gap-3 items-end mb-2 hidden max-h-[60vh] overflow-y-auto no-scrollbar p-1">
+            <!-- User bubbles will be injected here -->
         </div>
+
+        <!-- Smart Paste Toggle -->
+        <button id="fab-smart-toggle" onclick="toggleSmartMenu()" class="w-12 h-12 bg-purple-600 hover:bg-purple-500 text-white rounded-full shadow-xl shadow-purple-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 border-2 border-white/10 z-50" title="展開人員名單">
+            <i data-lucide="link" class="w-5 h-5 transition-transform duration-300" id="fab-icon-link"></i>
+        </button>
+
+        <!-- New Task FAB -->
+        <button id="fab-new-task" onclick="openTrackerModal()" class="w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group z-50"><i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i></button>
     </div>
 
     <!-- Tracker Modal -->
@@ -210,6 +204,9 @@
         </div>
     </div>
 
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col gap-2 w-max max-w-[90vw]"></div>
+
 
     <!-- APP LOGIC -->
     <script>
@@ -223,7 +220,7 @@
         let editingId = null; 
         let selectedTrackerIds = new Set();
         let currentView = 'tracker'; 
-        let tempSmartUrl = ''; // CR-006
+        let isSmartMenuOpen = false; // CR-008
         
         // --- 2. LOCAL STORAGE OPERATIONS ---
         function loadData() {
@@ -272,9 +269,22 @@
         function formatTimeWithSeconds(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
         function getTaipeiDate() { return new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 
+        // Re-enabled a simple visual toast for the bubble action feedback
         function showToast(msg, type='info') {
-            console.log(`[Action Complete] ${msg}`);
-            return;
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            
+            const div = document.createElement('div');
+            const bg = type === 'success' ? 'bg-emerald-600' : 'bg-dark-card border-dark-border';
+            div.className = `${bg} text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg backdrop-blur-md animate-[fadeIn_0.2s_ease-out] border border-white/10`;
+            div.innerHTML = msg;
+            container.appendChild(div);
+            
+            setTimeout(() => {
+                div.style.opacity = '0';
+                div.style.transform = 'translateY(10px)';
+                setTimeout(() => div.remove(), 300);
+            }, 2000);
         }
 
         function openUrl(url) { 
@@ -297,7 +307,7 @@
                 return await navigator.clipboard.readText();
             } catch (err) {
                 console.error('Failed to read clipboard', err);
-                return ''; // Return empty string on failure, handle in UI
+                return ''; 
             }
         }
 
@@ -459,98 +469,89 @@
             showToast('已儲存互助設定', 'success');
         };
 
-        // --- CR-006: Smart Paste Logic ---
-        window.openSmartPasteMenu = async () => {
-            const modal = document.getElementById('smart-paste-modal');
-            const previewInput = document.getElementById('smart-paste-preview');
-            const statusText = document.getElementById('smart-paste-status');
-            const listContainer = document.getElementById('smart-paste-list');
+        // --- CR-008: Bubble Menu Logic ---
+        window.toggleSmartMenu = () => {
+            const container = document.getElementById('smart-menu-container');
+            const icon = document.getElementById('fab-icon-link');
+            const names = mutualData.names || [];
 
-            // 1. Try to read clipboard
+            isSmartMenuOpen = !isSmartMenuOpen;
+
+            if (isSmartMenuOpen) {
+                // Show Menu
+                container.classList.remove('hidden');
+                icon.classList.add('rotate-45');
+                
+                if (names.length === 0) {
+                    container.innerHTML = `<div class="bg-dark-bg/80 backdrop-blur border border-dark-border px-3 py-1.5 rounded-lg text-xs text-dark-subtext bubble-enter">無名單</div>`;
+                } else {
+                    container.innerHTML = names.map((n, i) => {
+                        // Create Bubble
+                        const hasUrl = mutualData.users[n]?.url ? true : false;
+                        const bgClass = hasUrl ? 'bg-emerald-600 border-emerald-500 shadow-emerald-900/30' : 'bg-dark-card border-dark-border shadow-black/30';
+                        const delay = i * 0.05; // Stagger effect
+                        return `
+                        <button onclick="assignUrlToUserDirectly('${n}')" class="flex items-center gap-2 group bubble-enter" style="animation-delay: ${delay}s">
+                            <span class="text-xs font-bold text-white bg-black/50 px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-sm pointer-events-none">${n}</span>
+                            <div class="w-10 h-10 ${bgClass} border rounded-full flex items-center justify-center text-white shadow-lg transition-transform hover:scale-110 active:scale-95 text-xs font-bold overflow-hidden relative">
+                                <span class="relative z-10">${n.substring(0,2)}</span>
+                                ${hasUrl ? '<div class="absolute inset-0 bg-emerald-500/20"></div>' : ''}
+                            </div>
+                        </button>`;
+                    }).join('');
+                }
+            } else {
+                // Hide Menu
+                container.classList.add('hidden');
+                container.innerHTML = ''; // Clear to reset animations
+                icon.classList.remove('rotate-45');
+            }
+        };
+
+        // The core logic for "Click Bubble -> Paste"
+        window.assignUrlToUserDirectly = async (name) => {
             let clipboardText = '';
+            
+            // 1. Try Auto Read
             try {
                 clipboardText = await navigator.clipboard.readText();
-                statusText.textContent = "已自動讀取剪貼簿";
             } catch (err) {
-                console.log("Clipboard read failed, waiting for user input");
-                statusText.textContent = "請手動貼上連結 (權限受限)";
+                console.log("Clipboard read failed");
             }
 
-            // 2. Process text
-            const url = extractUrl(clipboardText);
-            previewInput.value = url || clipboardText; // Show url if found, else show raw text
-            tempSmartUrl = url;
+            // 2. Extract
+            let url = extractUrl(clipboardText);
 
-            if (url) {
-                statusText.textContent = "偵測到有效連結！請選擇要分配的人員：";
-                statusText.className = "text-[10px] text-emerald-400 mt-1 h-4 font-bold";
-            } else if (clipboardText) {
-                statusText.textContent = "未偵測到連結，請確認內容";
-                statusText.className = "text-[10px] text-red-400 mt-1 h-4";
-            }
-
-            // 3. Render List
-            const names = mutualData.names || [];
-            if (names.length === 0) {
-                listContainer.innerHTML = '<p class="col-span-2 text-center text-dark-subtext text-xs py-4">請先在設定中新增互助名單</p>';
-            } else {
-                listContainer.innerHTML = names.map(n => {
-                    const hasUrl = mutualData.users[n]?.url ? true : false;
-                    return `<button onclick="assignUrlToUser('${n}')" class="flex items-center justify-between px-3 py-3 bg-dark-input border border-dark-border rounded-lg hover:bg-purple-600 hover:text-white hover:border-purple-500 transition-all group">
-                        <span class="text-sm font-bold truncate">${n}</span>
-                        ${hasUrl ? '<i data-lucide="refresh-cw" class="w-3 h-3 text-dark-subtext group-hover:text-white/70"></i>' : '<i data-lucide="plus" class="w-3 h-3 text-dark-subtext group-hover:text-white"></i>'}
-                    </button>`;
-                }).join('');
-                lucide.createIcons();
-            }
-
-            // 4. Show Modal
-            modal.classList.remove('hidden');
-        };
-
-        window.closeSmartPasteMenu = () => {
-            document.getElementById('smart-paste-modal').classList.add('hidden');
-            tempSmartUrl = '';
-        };
-
-        window.handleSmartInput = (val) => {
-            const url = extractUrl(val);
-            tempSmartUrl = url;
-            const statusText = document.getElementById('smart-paste-status');
-            if (url) {
-                statusText.textContent = "偵測到有效連結！請選擇人員：";
-                statusText.className = "text-[10px] text-emerald-400 mt-1 h-4 font-bold";
-            } else {
-                statusText.textContent = "等待輸入...";
-                statusText.className = "text-[10px] text-dark-subtext mt-1 h-4";
-            }
-        };
-
-        window.assignUrlToUser = (name) => {
-            if (!tempSmartUrl) {
-                const inputVal = document.getElementById('smart-paste-preview').value;
-                const extracted = extractUrl(inputVal);
-                if (extracted) tempSmartUrl = extracted;
-                else {
-                    // Flash error
-                    const statusText = document.getElementById('smart-paste-status');
-                    statusText.textContent = "錯誤：無效的連結";
-                    statusText.className = "text-[10px] text-red-500 mt-1 h-4 font-bold";
-                    return;
+            // 3. Fallback if failed or empty
+            if (!url) {
+                // Use standard prompt as fallback to ensure usability
+                const manualInput = prompt(`無法自動讀取剪貼簿，請貼上要分配給 ${name} 的連結：`);
+                if (manualInput) {
+                    url = extractUrl(manualInput) || manualInput; // Try extract, else take raw
                 }
             }
-            
-            updateMutualUrl(name, tempSmartUrl);
-            closeSmartPasteMenu();
-            showToast(`已分配連結給 ${name}`, 'success');
-            
-            // Scroll to mutual view if not already there, to show the result
-            if (currentView !== 'mutual') {
-                switchView('mutual');
+
+            // 4. Save or Error
+            if (url) {
+                updateMutualUrl(name, url);
+                showToast(`已分配給 ${name}`, 'success');
+                // Close menu after success
+                toggleSmartMenu();
+                // Scroll to view if needed
+                if(currentView !== 'mutual') switchView('mutual');
             } else {
-                // If already in mutual view, maybe flash the card? (Optional polish)
+                showToast('未偵測到有效連結', 'error');
             }
         };
+        
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            const container = document.getElementById('smart-menu-container');
+            const toggle = document.getElementById('fab-smart-toggle');
+            if (isSmartMenuOpen && !container.contains(e.target) && !toggle.contains(e.target)) {
+                toggleSmartMenu();
+            }
+        });
 
 
         // --- 6. UI RENDER FUNCTIONS ---
@@ -802,7 +803,7 @@
 
         function exportData() {
             const data = {
-                version: '7.5', // Bumped version
+                version: '7.7', // Bumped version
                 tasks: localStorage.getItem(LOCAL_STORAGE_KEY_TASKS),
                 mutual: localStorage.getItem(LOCAL_STORAGE_KEY_MUTUAL)
             };
