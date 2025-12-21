@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V7.3 (分頁模式)</title>
+    <title>Command Center V7.4 (串連模式)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -19,8 +19,10 @@
         .custom-checkbox::before { content: ""; width: 0.65em; height: 0.65em; transform: scale(0); box-shadow: inset 1em 1em white; transform-origin: center; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); transition: 120ms transform ease-in-out; }
         .custom-checkbox:checked { background-color: #2563eb; border-color: #2563eb; }
         .custom-checkbox:checked::before { transform: scale(1); }
-        .view-section { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        /* CR-UI-001: 移除 fadeIn 動畫，因為區塊現在是常駐的 */
+        /* .view-section { animation: fadeIn 0.3s ease-in-out; } */
+        /* CR-UI-002: Header 補償高度，確保錨點定位準確 */
+        .scroll-mt-header { scroll-margin-top: 180px; } 
     </style>
     <script>
         tailwind.config = { darkMode: 'class', theme: { extend: { colors: { dark: { bg: '#0f172a', card: '#1e293b', input: '#334155', border: '#334155', text: '#f8fafc', subtext: '#94a3b8', } } } } }
@@ -29,45 +31,49 @@
 <body class="min-h-screen flex flex-col items-center">
 
     <!-- MAIN APP -->
-    <div id="main-app" class="w-full max-w-lg mx-auto space-y-6 p-4 md:p-8 pb-24">
+    <div id="main-app" class="w-full max-w-lg mx-auto p-4 md:p-8 pb-32 relative">
         
-        <!-- Header -->
-        <header class="flex flex-col gap-3 bg-dark-card border border-dark-border p-3 rounded-xl shadow-lg relative overflow-hidden">
-            <div class="absolute top-2 right-2 flex items-center gap-2">
-                <!-- Data Management Button -->
-                <button onclick="openDataManagementModal()" class="px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext hover:text-white hover:bg-white/10 transition-colors flex items-center gap-1 group" title="資料管理 (備份/還原)">
-                    <i data-lucide="database" class="w-3 h-3 group-hover:text-amber-400"></i>
-                </button>
-                <span class="px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext font-mono" title="離線模式">
-                    OFFLINE
-                </span>
-            </div>
+        <!-- Header (CR-UI-002: Sticky Header) -->
+        <!-- 增加 sticky, top-0, z-30, backdrop-blur 屬性 -->
+        <header class="sticky top-0 z-30 bg-dark-bg/95 backdrop-blur-md pt-2 pb-4 mb-4 transition-all duration-300">
+            <div class="flex flex-col gap-3 bg-dark-card border border-dark-border p-3 rounded-xl shadow-lg relative overflow-hidden">
+                <div class="absolute top-2 right-2 flex items-center gap-2">
+                    <!-- Data Management Button -->
+                    <button onclick="openDataManagementModal()" class="px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext hover:text-white hover:bg-white/10 transition-colors flex items-center gap-1 group" title="資料管理 (備份/還原)">
+                        <i data-lucide="database" class="w-3 h-3 group-hover:text-amber-400"></i>
+                    </button>
+                    <span class="px-2 py-1 bg-dark-bg/50 rounded border border-white/5 text-[10px] text-dark-subtext font-mono" title="離線模式">
+                        OFFLINE
+                    </span>
+                </div>
 
-            <div class="flex justify-between items-center mt-1">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-900/50">
-                        <i data-lucide="command" class="w-5 h-5"></i>
-                    </div>
-                    <div>
-                        <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">COMMAND CTR (離線)</h1>
-                        <div class="flex items-center gap-2 text-[10px] text-dark-subtext font-mono">
-                            <span id="header-time-text" class="text-emerald-400 font-bold">--:--:--</span>
-                            <span>•</span>
-                            <span id="date-text">--/--</span>
+                <div class="flex justify-between items-center mt-1">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-blue-900/50">
+                            <i data-lucide="command" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h1 class="font-bold text-sm tracking-wide text-white flex items-center gap-2">COMMAND CTR V7.4</h1>
+                            <div class="flex items-center gap-2 text-[10px] text-dark-subtext font-mono">
+                                <span id="header-time-text" class="text-emerald-400 font-bold">--:--:--</span>
+                                <span>•</span>
+                                <span id="date-text">--/--</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Button Switcher: Use switchView() -->
-            <div class="flex bg-dark-bg p-1 rounded-lg border border-dark-border overflow-x-auto no-scrollbar">
-                <button id="btn-view-tracker" onclick="switchView('tracker')" class="flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1"><i data-lucide="list-todo" class="w-3 h-3"></i> 任務</button>
-                <button id="btn-view-mutual" onclick="switchView('mutual')" class="flex-1 ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center justify-center gap-1"><i data-lucide="users" class="w-3 h-3"></i> 互助</button>
+                <!-- Button Switcher: Use switchView() (CR-005: Scroll Navigation) -->
+                <div class="flex bg-dark-bg p-1 rounded-lg border border-dark-border overflow-x-auto no-scrollbar">
+                    <button id="btn-view-tracker" onclick="switchView('tracker')" class="flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1"><i data-lucide="list-todo" class="w-3 h-3"></i> 任務</button>
+                    <button id="btn-view-mutual" onclick="switchView('mutual')" class="flex-1 ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center justify-center gap-1"><i data-lucide="users" class="w-3 h-3"></i> 互助</button>
+                </div>
             </div>
         </header>
 
-        <!-- ==================== TRACKER VIEW (Default) ==================== -->
-        <div id="view-tracker" class="view-section space-y-6">
+        <!-- ==================== TRACKER VIEW ==================== -->
+        <!-- CR-UI-001: Remove hidden class, Add scroll-mt-header -->
+        <div id="view-tracker" class="view-section space-y-6 scroll-mt-header min-h-[50vh]">
             <div class="flex justify-between items-end">
                 <h2 class="text-sm font-bold text-dark-subtext tracking-wider uppercase whitespace-nowrap mr-2">日常任務清單</h2>
                 <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar justify-end w-full">
@@ -76,15 +82,19 @@
                 </div>
             </div>
             
-            <div id="tracker-list" class="space-y-3 pb-8"></div>
+            <div id="tracker-list" class="space-y-3"></div>
             <div id="tracker-empty" class="py-12 text-center opacity-40 select-none hidden">
                 <i data-lucide="cloud-off" class="w-12 h-12 mx-auto mb-3 text-dark-subtext opacity-50 block"></i>
                 <p class="text-xs text-dark-subtext uppercase tracking-widest font-bold">目前沒有任務</p>
             </div>
         </div>
         
-        <!-- ==================== MUTUAL VIEW (New Section) ==================== -->
-        <div id="view-mutual" class="view-section space-y-6 hidden">
+        <!-- Separator (CR-UI-001) -->
+        <div class="h-px bg-gradient-to-r from-transparent via-dark-border to-transparent my-12"></div>
+
+        <!-- ==================== MUTUAL VIEW ==================== -->
+        <!-- CR-UI-001: Remove hidden class, Add scroll-mt-header -->
+        <div id="view-mutual" class="view-section space-y-6 scroll-mt-header">
             <div class="flex justify-between items-start mb-4 shrink-0">
                 <div>
                     <h2 class="text-sm font-bold text-dark-subtext tracking-wider uppercase mb-1 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-purple-400"></i> 互助簽到</h2>
@@ -96,7 +106,6 @@
                 </div>
             </div>
             
-            <!-- Quick Helper and List moved from the old modal -->
             <div id="mutual-quick-helper" class="bg-dark-input/50 rounded-lg p-3 border border-dark-border shrink-0">
                 <p class="text-[10px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-1"><i data-lucide="zap" class="w-3 h-3"></i> 一鍵標記 (點擊標記所有人已被此人幫助)</p>
                 <div id="mutual-helper-buttons" class="flex flex-wrap gap-2"></div>
@@ -106,8 +115,8 @@
 
     </div>
 
-    <!-- FAB -->
-    <!-- FAB只在任務頁面顯示，因此使用switchView('tracker')來判斷是否隱藏 -->
+    <!-- FAB (CR-UI-003: Always Visible) -->
+    <!-- Removed logic that hides this button -->
     <button id="fab-new-task" onclick="openTrackerModal()" class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/50 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"><i data-lucide="plus" class="w-8 h-8 group-hover:rotate-90 transition-transform duration-300"></i></button>
 
     <!-- Tracker Modal -->
@@ -116,7 +125,6 @@
             <h3 id="modal-title" class="text-lg font-bold text-white mb-6 flex items-center gap-2"><i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i><span>編輯任務</span></h3>
             <div class="space-y-4">
                 <div><label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">名稱</label><input type="text" id="modal-name" class="w-full bg-dark-input border border-dark-border rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none transition-colors"></div>
-                <!-- URL 欄位保留，用於手動輸入連結 -->
                 <div>
                     <label class="text-xs font-bold text-dark-subtext uppercase mb-1 block">URL (點擊後開啟)</label>
                     <div class="flex gap-2">
@@ -137,7 +145,7 @@
         </div>
     </div>
 
-    <!-- Mutual Settings Modal (Moved out of the main view) -->
+    <!-- Mutual Settings Modal -->
     <div id="mutual-settings-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity overflow-y-auto">
         <div class="bg-dark-bg border border-dark-border rounded-xl shadow-2xl w-full max-w-sm p-6 relative max-h-[90vh] flex flex-col">
             <h3 class="text-lg font-bold text-white mb-6 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5 text-purple-400"></i><span>互助設定</span></h3>
@@ -155,7 +163,6 @@
             </div>
         </div>
     </div>
-
 
     <!-- Reset Menu Modal -->
     <div id="reset-menu-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm transition-opacity">
@@ -196,12 +203,13 @@
         // --- 1. CONFIGURATION & STATE ---
         const LOCAL_STORAGE_KEY_TASKS = 'cmd_offline_tasks';
         const LOCAL_STORAGE_KEY_MUTUAL = 'cmd_offline_mutual';
+        const LOCAL_STORAGE_KEY_VIEW = 'cmd_offline_last_view'; // CR-FUNC-003: State Key
 
         let trackerData = [];
         let mutualData = { target: 3, names: [], users: {} }; 
         let editingId = null; 
         let selectedTrackerIds = new Set();
-        let currentView = 'tracker'; // 初始視圖狀態
+        let currentView = 'tracker'; 
         
         // --- 2. LOCAL STORAGE OPERATIONS ---
         
@@ -220,7 +228,6 @@
             if (storedMutual) {
                 try {
                     Object.assign(mutualData, JSON.parse(storedMutual));
-                    // Clean up old properties (like todayHelper) on load
                     Object.keys(mutualData.users || {}).forEach(name => {
                         delete mutualData.users[name].todayHelper;
                     });
@@ -232,12 +239,12 @@
         
         function saveTasks() {
             localStorage.setItem(LOCAL_STORAGE_KEY_TASKS, JSON.stringify(trackerData));
-            if (currentView === 'tracker') renderTracker();
+            renderTracker(); // Always render in vertical mode
         }
 
         function saveMutualData() {
             localStorage.setItem(LOCAL_STORAGE_KEY_MUTUAL, JSON.stringify(mutualData));
-            if (currentView === 'mutual') renderMutualList();
+            renderMutualList(); // Always render in vertical mode
         }
         
         // --- 3. HELPER FUNCTIONS ---
@@ -253,15 +260,11 @@
         function formatTimeWithSeconds(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
         function getTaipeiDate() { return new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 
-        // 移除完成提示 (Toast Notification) 邏輯 (用戶要求)
         function showToast(msg, type='info') {
-            // 用戶要求移除完成提示，以避免佔用空間和造成干擾。
-            // 該函式現在為空，所有呼叫將靜默執行。
             console.log(`[Action Complete] ${msg}`);
             return;
         }
 
-        // 核心修改: 避免彈出警告
         function openUrl(url) { 
             if(!url) return; 
             window.open(url.startsWith('http')?url:'https://'+url, '_blank'); 
@@ -283,7 +286,6 @@
                 return await navigator.clipboard.readText();
             } catch (err) {
                 console.error('Failed to read clipboard', err);
-                // 替換 alert()
                 confirm('無法讀取剪貼簿，請手動貼上 (Ctrl+V)');
                 return '';
             }
@@ -295,12 +297,8 @@
             const clean = extractUrl(text);
             const input = document.getElementById('modal-url');
             if(input) {
-                if(clean) {
-                    input.value = clean;
-                } else {
-                    // 替換 alert()
-                    confirm('未偵測到有效網址 (需包含 http/https)');
-                }
+                if(clean) input.value = clean;
+                else confirm('未偵測到有效網址 (需包含 http/https)');
                 input.dispatchEvent(new Event('input', { bubbles: true }));
             }
         };
@@ -314,7 +312,6 @@
                 input.value = clean;
                 updateMutualUrl(name, clean);
             } else {
-                // 替換 alert()
                 confirm('未偵測到有效網址');
             }
         };
@@ -332,13 +329,11 @@
                     showToast('已更新連結', 'success');
                 }
             } else {
-                // 替換 alert()
                 confirm('未偵測到有效網址');
             }
         };
 
         window.clearTrackerUrl = (id) => {
-             // 替換 confirm()
              if(!confirm('確定要清除此連結？')) return;
              const index = trackerData.findIndex(t => t.id === id);
              if (index !== -1) {
@@ -364,7 +359,6 @@
 
         window.deleteSelectedTasks = async () => {
             if(selectedTrackerIds.size === 0) return;
-            // 替換 confirm()
             if(!confirm(`確定要刪除選取的 ${selectedTrackerIds.size} 個項目嗎？`)) return;
             
             trackerData = trackerData.filter(t => !selectedTrackerIds.has(t.id));
@@ -395,12 +389,11 @@
         window.updateMutualUrl = updateMutualUrl;
 
         window.resetRound = () => {
-            // 替換 confirm()
             if(!confirm('確定要重置所有人的簽到紀錄嗎？這將清空累計次數。')) return;
             const names = mutualData.names || [];
             names.forEach(n => {
                 if(mutualData.users[n]) {
-                    mutualData.users[n].history = []; // 清空累計紀錄 (要求 3)
+                    mutualData.users[n].history = []; 
                 }
             });
             saveMutualData();
@@ -408,7 +401,6 @@
             showToast('已重置互助紀錄', 'success');
         };
 
-        // 要求 4: 累計簽到當自己幫自己簽到時不列入計算
         window.toggleHistory = (targetName, helperName) => {
             if (targetName === helperName) return; 
             
@@ -424,19 +416,14 @@
             saveMutualData();
         };
         
-        // 移除 todayHelper 邏輯 (要求 3)
         window.markAllAsHelpedBy = (helperName) => {
-            // 替換 confirm()
             if(!confirm(`將所有人標記為已被 ${helperName} 幫助/簽到？這會累計一次紀錄。`)) return;
             const names = mutualData.names || [];
             names.forEach(target => {
-                // 要求 4: 不計算自己幫助自己的情況
                 if (target === helperName) return; 
-
                 const u = mutualData.users[target];
                 if(!u) return;
                 if(!u.history) u.history = [];
-                // 確保只加入一次 (如果已存在，則不重複加入，保持 toggle 的邏輯)
                 if(!u.history.includes(helperName)) u.history.push(helperName);
             });
             saveMutualData();
@@ -451,18 +438,15 @@
             mutualData.target = t > 0 ? t : 1;
             mutualData.names = n;
             
-            // 初始化/清理用戶數據
             const newUsers = {};
             n.forEach(name => {
-                // 保留現有的 history 和 url (要求 3)
                 newUsers[name] = mutualData.users[name] || { url:'', history:[] };
-                // 確保沒有 todayHelper (移除 todayHelper 邏輯)
                 delete newUsers[name].todayHelper;
             });
             mutualData.users = newUsers;
             
             saveMutualData();
-            closeMutualSettingsModal(); // 儲存後關閉設定框
+            closeMutualSettingsModal();
             document.getElementById('target-display').textContent = mutualData.target;
             showToast('已儲存互助設定', 'success');
         };
@@ -515,6 +499,9 @@
                     </div>
                 </div>`;
             }).join('');
+            
+            // Note: lucide.createIcons() is called globally in initApp or after switching in this version, 
+            // but we call it here to ensure dynamic updates work.
             lucide.createIcons();
         }
         window.renderTracker = renderTracker;
@@ -535,11 +522,9 @@
 
             if(!mutualHelperButtonsEl || !mutualListEl) return;
             
-            // 更新目標次數顯示
             const targetDisplayEl = document.getElementById('target-display');
             if(targetDisplayEl) targetDisplayEl.textContent = d.target || 3;
 
-            // 一鍵標記按鈕 (要求 3: 保留功能，但移除 dailyHelper 邏輯)
             mutualHelperButtonsEl.innerHTML = names.map(n => `<button onclick="markAllAsHelpedBy('${n}')" class="px-3 py-1 bg-dark-card border border-dark-border rounded text-xs font-bold hover:bg-blue-600 hover:text-white transition-colors">${n}</button>`).join('');
             
             mutualListEl.innerHTML = names.map(n => {
@@ -549,18 +534,15 @@
                 const done = historyCount >= target;
                 const border = done ? 'border-amber-500/50 bg-amber-900/10' : 'border-dark-border bg-dark-card';
                 
-                // 狀態顯示 (要求 3: 移除 todayHelper，僅顯示是否完成本輪)
                 const status = done 
                     ? `<span class="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> 本輪完成</span>` 
                     : `<span class="text-xs font-bold text-dark-subtext bg-white/5 px-2 py-0.5 rounded">未達標</span>`;
 
-                // 互助者按鈕
-                const helpers = names.filter(x => x !== n).map(h => { // 排除自己 (要求 4: 互助者名單不包含自己)
+                const helpers = names.filter(x => x !== n).map(h => {
                     const active = u.history.includes(h);
                     return `<button onclick="toggleHistory('${n}', '${h}')" class="${active ? 'bg-emerald-600 text-white shadow shadow-emerald-900/50 border-emerald-500' : 'bg-dark-input text-dark-subtext border-dark-border'} border px-3 py-1.5 rounded text-xs font-bold transition-all active:scale-95 flex-1 min-w-[3rem]">${h}</button>`;
                 }).join('');
                 
-                // 自己標記自己的按鈕 (顯示為不可點擊，並告知原因)
                 const selfHelp = names.filter(x => x === n).map(h => {
                     return `<button class="bg-red-900/10 text-red-400 border border-red-500/30 px-3 py-1.5 rounded text-xs font-bold opacity-50 cursor-not-allowed" title="不能幫自己簽到">${h} (排除)</button>`;
                 }).join('');
@@ -607,26 +589,28 @@
 
         // --- 7. MAIN LOGIC & LOOPS ---
         
-        // NEW: View Switcher
+        // CR-FUNC-001: Navigation Logic Update (Scroll instead of Toggle)
         function switchView(viewId) {
             currentView = viewId;
+            // CR-FUNC-003: Persist State
+            localStorage.setItem(LOCAL_STORAGE_KEY_VIEW, viewId);
+
             const isTracker = viewId === 'tracker';
-
-            document.getElementById('view-tracker').classList.toggle('hidden', !isTracker);
-            document.getElementById('view-mutual').classList.toggle('hidden', isTracker);
-            document.getElementById('fab-new-task').classList.toggle('hidden', !isTracker);
-
             const btnTracker = document.getElementById('btn-view-tracker');
             const btnMutual = document.getElementById('btn-view-mutual');
 
             if (isTracker) {
                 btnTracker.className = 'flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1';
                 btnMutual.className = 'flex-1 ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white border border-purple-500/30 flex items-center justify-center gap-1';
-                renderTracker();
             } else {
                 btnTracker.className = 'flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30 flex items-center justify-center gap-1';
                 btnMutual.className = 'flex-1 ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-600 text-white shadow-sm flex items-center justify-center gap-1';
-                renderMutualList();
+            }
+            
+            // Scroll Logic
+            const target = document.getElementById('view-' + viewId);
+            if(target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
         }
         window.switchView = switchView;
@@ -642,7 +626,6 @@
                         trackerData[index].clicks = (trackerData[index].clicks || 0) + 1;
                         saveTasks();
                     }
-                    // 核心修改: 不再檢查彈出視窗是否被封鎖，直接嘗試開啟 (要求 2)
                     window.open(l.url.startsWith('http')?l.url:'https://'+l.url, '_blank');
                 }
             });
@@ -708,10 +691,7 @@
         }
         window.saveTrackerTask = saveTrackerTask;
         
-        // Mutual Modals
-        // 舊的 open/closeMutualModal 替換為開關設定框
         window.openMutualSettingsModal = () => {
-             // 載入當前設定值
             document.getElementById('mutual-names-input').value = (mutualData.names || []).join('\n'); 
             document.getElementById('mutual-target-input').value = mutualData.target || 3; 
             document.getElementById('mutual-settings-modal').classList.remove('hidden'); 
@@ -735,7 +715,7 @@
 
         function exportData() {
             const data = {
-                version: '7.3',
+                version: '7.4', // Bumped version
                 tasks: localStorage.getItem(LOCAL_STORAGE_KEY_TASKS),
                 mutual: localStorage.getItem(LOCAL_STORAGE_KEY_MUTUAL)
             };
@@ -769,13 +749,14 @@
                         return;
                     }
 
-                    // 覆蓋本地儲存
                     localStorage.setItem(LOCAL_STORAGE_KEY_TASKS, importedData.tasks);
                     localStorage.setItem(LOCAL_STORAGE_KEY_MUTUAL, importedData.mutual);
                     
-                    // 重新載入並渲染
+                    // CR-FUNC-002: Reload logic
                     loadData();
-                    switchView(currentView); // 保持在當前視圖並刷新
+                    renderTracker();
+                    renderMutualList();
+                    lucide.createIcons();
                     
                     closeDataManagementModal();
                     showToast('資料匯入成功！已還原備份。', 'success');
@@ -784,7 +765,6 @@
                     console.error("Import Error:", error);
                     confirm('匯入失敗，請檢查檔案是否為有效的 JSON 格式。');
                 } finally {
-                    // 清空檔案輸入欄位，以便下次可以再次選擇同一個檔案
                     event.target.value = '';
                 }
             };
@@ -794,11 +774,29 @@
 
 
         // --- 10. INIT ---
+        // CR-FUNC-002 & CR-FUNC-003: Optimized Init & Persistence
         function initApp() {
+            // 1. Load Data
             loadData();
-            // 初始載入時切換到預設視圖 (tracker)
-            switchView('tracker'); 
-            // Start Loop
+            
+            // 2. Render BOTH immediately (for speed)
+            renderTracker();
+            renderMutualList();
+            
+            // 3. Render Icons Once
+            lucide.createIcons();
+
+            // 4. Restore Scroll Position/Active View (CR-FUNC-003)
+            const lastView = localStorage.getItem(LOCAL_STORAGE_KEY_VIEW);
+            if (lastView && lastView !== 'tracker') {
+               // Only switch if it's not the default top view to avoid unnecessary jump
+               switchView(lastView);
+            } else {
+               // Default highlight
+               switchView('tracker');
+            }
+
+            // 5. Start Loop
             setInterval(updateTimerLoop, 1000);
         }
 
