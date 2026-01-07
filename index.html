@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Command Center V7.8 (跳轉優化)</title>
+    <title>Command Center V7.8 (跳轉與折疊優化)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -645,13 +645,13 @@
                 }).join('');
 
                 return `
-                <div class="${border} border rounded-xl p-4 relative overflow-hidden">
+                <div class="${border} border rounded-xl p-4 relative overflow-hidden transition-all duration-300">
                     ${done ? '<div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-amber-400/20 to-transparent rounded-bl-3xl -mr-4 -mt-4"></div>' : ''}
-                    <div class="flex justify-between items-start mb-3 relative z-10">
+                    <div class="flex justify-between items-start ${done ? '' : 'mb-3'} relative z-10">
                         <div>
                             <div class="flex items-center gap-2 mb-1">
                                 <h4 class="font-bold text-white text-lg">${n}</h4>
-                                ${done ? '<span class="text-[10px] font-bold text-amber-900 bg-amber-400 px-2 py-0.5 rounded shadow-sm">本輪已完成</span>' : ''}
+                                ${done ? '<span class="text-[10px] font-bold text-amber-900 bg-amber-400 px-2 py-0.5 rounded shadow-sm">已折疊</span>' : ''}
                             </div>
                             <div class="flex items-center gap-2">
                                 ${status}
@@ -660,20 +660,24 @@
                                 </span>
                             </div>
                         </div>
-                        <button onclick="if(mutualData.users['${n}'].url) openUrl(mutualData.users['${n}'].url)" class="${u.url ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-dark-input text-dark-subtext cursor-not-allowed'} px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">前往 <i data-lucide="external-link" class="w-3 h-3"></i></button>
+                        <button onclick="if(mutualData.users['${n}'].url) { openUrl(mutualData.users['${n}'].url); updateMutualUrl('${n}', ''); }" class="${u.url ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-dark-input text-dark-subtext cursor-not-allowed'} px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm">前往並清空 <i data-lucide="external-link" class="w-3 h-3"></i></button>
                     </div>
-                    <div class="flex gap-2 mb-4 relative z-10">
-                        <div class="relative flex-1"><input type="text" value="${u.url||''}" onpaste="handlePasteInput(event, this)" oninput="updateMutualUrl('${n}', extractUrl(this.value))" id="mutual-input-${n}" class="w-full bg-dark-input border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors" placeholder="貼上連結..."></div>
-                        <div class="flex gap-1">
-                            <button onclick="pasteToMutual('mutual-input-${n}', '${n}')" class="bg-dark-input border border-dark-border px-3 rounded-lg text-dark-subtext hover:text-white hover:bg-white/5 transition-colors" title="貼上"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
-                            <button onclick="updateMutualUrl('${n}', '')" class="bg-red-500/10 border border-red-500/30 px-3 rounded-lg text-red-400 hover:text-white hover:bg-red-500 transition-colors" title="清除連結"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    
+                    <!-- 完成後自動隱藏下方操作區塊 (折疊) -->
+                    <div class="${done ? 'hidden' : 'block'}">
+                        <div class="flex gap-2 mb-4 mt-4 relative z-10">
+                            <div class="relative flex-1"><input type="text" value="${u.url||''}" onpaste="handlePasteInput(event, this)" oninput="updateMutualUrl('${n}', extractUrl(this.value))" id="mutual-input-${n}" class="w-full bg-dark-input border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm text-white focus:border-blue-500 focus:outline-none transition-colors" placeholder="貼上連結..."></div>
+                            <div class="flex gap-1">
+                                <button onclick="pasteToMutual('mutual-input-${n}', '${n}')" class="bg-dark-input border border-dark-border px-3 rounded-lg text-dark-subtext hover:text-white hover:bg-white/5 transition-colors" title="貼上"><i data-lucide="clipboard-paste" class="w-4 h-4"></i></button>
+                                <button onclick="updateMutualUrl('${n}', '')" class="bg-red-500/10 border border-red-500/30 px-3 rounded-lg text-red-400 hover:text-white hover:bg-red-500 transition-colors" title="清除連結"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            </div>
                         </div>
-                    </div>
-                    <div class="border-t border-white/5 pt-3 relative z-10">
-                        <p class="text-[10px] font-bold text-dark-subtext uppercase mb-2">可幫助 ${n} 的人員</p>
-                        <div class="flex flex-wrap gap-2">
-                            ${helpers}
-                            ${selfHelp}
+                        <div class="border-t border-white/5 pt-3 relative z-10">
+                            <p class="text-[10px] font-bold text-dark-subtext uppercase mb-2">可幫助 ${n} 的人員</p>
+                            <div class="flex flex-wrap gap-2">
+                                ${helpers}
+                                ${selfHelp}
+                            </div>
                         </div>
                     </div>
                 </div>`;
@@ -805,7 +809,7 @@
 
         function exportData() {
             const data = {
-                version: '7.8', // Bumped version
+                version: '7.8',
                 tasks: localStorage.getItem(LOCAL_STORAGE_KEY_TASKS),
                 mutual: localStorage.getItem(LOCAL_STORAGE_KEY_MUTUAL)
             };
@@ -883,4 +887,3 @@
     </script>
 </body>
 </html>
-
